@@ -16,7 +16,7 @@ For WordNet 3.0 we can use the [Python library wn](https://github.com/goodmami/w
 
 ### English WSD
 
-This has come from [Raganato et al. 2017](https://aclanthology.org/E17-1010.pdf) it downloads the following training and test datasets:
+This has come from [Raganato et al. 2017](https://aclanthology.org/E17-1010.pdf) (website of the dataset [http://lcl.uniroma1.it/wsdeval/home](http://lcl.uniroma1.it/wsdeval/home)) it downloads the following training and test datasets too [./data/WSD_Evaluation_Framework/](./data/WSD_Evaluation_Framework/):
 
 - Training
     * SemCor
@@ -29,3 +29,11 @@ This has come from [Raganato et al. 2017](https://aclanthology.org/E17-1010.pdf)
     * SemEval-15
 
 The results from the combined test sets is called `ALL EN` in [Conia et al. 2024](https://aclanthology.org/2024.naacl-long.442/) and `ALL` in [Raganato et al. 2017](https://aclanthology.org/E17-1010.pdf). In some method based WSD papers the SemEval-7 dataset is used as the development/validation set, see [Barba et al. 2021](https://aclanthology.org/2021.naacl-main.371.pdf) and [Zhang et al. 2022](https://aclanthology.org/2022.coling-1.357/)
+
+### Multilingual WSD
+
+This has come from [Pasini et al. 2021](https://ojs.aaai.org/index.php/AAAI/article/view/17609) (website of the dataset [https://sapienzanlp.github.io/xl-wsd/](https://sapienzanlp.github.io/xl-wsd/)) it downloads the following training and test datasets too [./data/xl-wsd/](./data/xl-wsd/)
+
+### Hard datasets
+
+To be added, but this will come from the following paper [Maru et al. 2022](https://aclanthology.org/2022.acl-long.324/) whereby the data can be found on the related [GitHub](https://github.com/SapienzaNLP/wsd-hard-benchmark).
