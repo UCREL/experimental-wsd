@@ -12,6 +12,8 @@ cd data
 bash download_data.sh
 ```
 
+For WordNet 3.0 we can use the [Python library wn](https://github.com/goodmami/wn) and to be compatible with previous work we will use the [Princeton WordNet 3.0](https://wordnet.princeton.edu/) and [NLTK](https://www.nltk.org/howto/wordnet.html) version which is [OMW English Wordnet based on WordNet 3.0](https://github.com/omwn/omw-data).
+
 ### English WSD
 
 This has come from [Raganato et al. 2017](https://aclanthology.org/E17-1010.pdf) it downloads the following training and test datasets:
