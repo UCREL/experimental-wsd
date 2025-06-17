@@ -1,2 +1,3 @@
 data/*
 !data/download_data.sh
+.python-version
