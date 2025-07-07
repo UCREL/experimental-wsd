@@ -19,3 +19,6 @@ rm "${english_hard_wsd}.zip"
 mkdir "${english_hard_wsd}"
 mv ./wsd-hard-benchmark-main/wsd_hard_benchmark/* $english_hard_wsd/.
 rm -r ./wsd-hard-benchmark-main
+
+# Gather the English WordNet
+uv run python -m wn download omw-en:1.4
