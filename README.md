@@ -1,12 +1,12 @@
-# experimental-wsd
-Experiments in WSD
+# Experimental WSD
+Experiments in Word Sense Disambiguation.
 
 ## Setup
 
 This project uses [uv](https://docs.astral.sh/uv/) as the python package and project manager, e.g. instead of pip, poetry, etc. To install uv see the following [guide](https://docs.astral.sh/uv/getting-started/installation/).
 
 ``` bash
-uv init
+uv init --no-package
 ```
 
 To add a python package
@@ -15,32 +15,48 @@ To add a python package
 uv add PYTHON_PACKAGE
 ```
 
-Linting and formatting with [ruff](https://docs.astral.sh/ruff/) it is a replacement for tools like Flake8, isort, Black etc. When `uv` installs a tool it installs it to your local path, e.g. for Linux this would be `$HOME/.local/bin`
-``` bash
-uv tool install "ruff>=0.11.13"
-```
+To activate a Python repl with all of the project requirements:
 
 ``` bash
-ruff check # Linting
-ruff format # Formatting
+uv run python
 ```
-
-For type checking instead of mypy we are going to use [pyrefly](https://github.com/facebook/pyrefly), in the future we might move to [ty](https://github.com/astral-sh/ty).
-
-``` bash
-uv tool install "pyrefly>=0.19.0"
-pyrefly init
-```
-
-``` bash
-pyrefly check
-```
-
 
 To export to a common lock file as determined by [PEP 751](https://peps.python.org/pep-0751/), `pylock.toml` which is not currently fully supported by uv hence the `uv.lock` file :
 
 ``` bash
-uv export -o pylock.toml
+uv export --format pylock.toml -o pylock.toml
+```
+
+You can also export to requirements.txt format like so:
+
+``` bash
+uv export --format requirements.txt -o requirements.txt
+```
+
+### Linting
+
+Linting and formatting with [ruff](https://docs.astral.sh/ruff/) it is a replacement for tools like Flake8, isort, Black etc. For type checking instead of mypy we are using [pyrefly](https://github.com/facebook/pyrefly), in the future we might move to [ty](https://github.com/astral-sh/ty).
+
+To run the linting and type checking:
+
+``` bash
+make check
+```
+
+### Tests
+
+To run the tests:
+
+``` bash
+make test
+```
+
+### Environment variables
+
+To download the [WSL dataset](#word-sense-linking-wsl-bejgu-et-al-2024) this requires you to have access to it and for you to have created a [HuggingFace access token](https://huggingface.co/docs/hub/en/datasets-polars-auth), once you have access to the dataset and have created a HuggingFace access token, add the token to the `HF_TOKEN` variable within [./.env](./.env), e.g.:
+
+``` bash
+HF_TOKEN=xxxxxxx
 ```
 
 ## Data
@@ -85,3 +101,8 @@ The results from the combined test sets is called `ALL EN` in [Conia et al. 2024
 ### Multilingual XL-WSD 2021
 
 This has come from [Pasini et al. 2021](https://ojs.aaai.org/index.php/AAAI/article/view/17609) (website of the dataset [https://sapienzanlp.github.io/xl-wsd/](https://sapienzanlp.github.io/xl-wsd/)) it downloads the following training and test datasets too [./data/xl-wsd/](./data/xl-wsd/). The dataset covers 18 languages including English using the BabelNet version 4 as the sense inventory. The English evaluation dataset is an extension of [Raganato et al. 2017](https://aclanthology.org/E17-1010.pdf) to include SemEval 2010 task 17 as well as the coarse grained WSD task data from SemEval 2007 task 7. All test dataset have been manually annotated whereas the training datasets from languages other than English have been created using English training data and machine translation.
+
+
+### Word Sense Linking (WSL) Bejgu et al. 2024
+
+Requires permission to access this dataset, but it is still free, you have to request permission through HuggingFace at the dataset's [data page](https://huggingface.co/datasets/Babelscape/wsl). 
