@@ -22,3 +22,21 @@ rm -r ./wsd-hard-benchmark-main
 
 # Gather the English WordNet
 uv run python -m wn download omw-en:1.4
+
+# Adds the data folder paths to the environment file.
+script_directory=$(realpath $(dirname ${BASH_SOURCE[0]}))
+env_file="${script_directory}/../.env"
+grep -q "XL_WSD_PATH" $env_file
+
+if [ $? -eq 0 ]
+then
+    echo "Not adding Environment variables to the ${env_file} as they already exist"
+    exit 0
+fi
+
+echo "Adding environment variables to the ${env_file}"
+
+xl_wsd_path="${script_directory}/xl-wsd"
+english_hard_wsd_path="${script_directory}/english-hard-wsd"
+english_raganato_path="${script_directory}/WSD_Evaluation_Framework"
+echo -e "\nXL_WSD_PATH=${xl_wsd_path}\nENGLISH_MARU_HARD=${english_hard_wsd_path}\nENGLISH_RAGANATO=${english_raganato_path}" >> $env_file

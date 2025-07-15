@@ -70,6 +70,18 @@ bash download_data.sh
 
 For WordNet 3.0 we can use the [Python library wn](https://github.com/goodmami/wn) and to be compatible with previous work we will use the [Princeton WordNet 3.0](https://wordnet.princeton.edu/) and [NLTK](https://www.nltk.org/howto/wordnet.html) version which is [OMW English Wordnet based on WordNet 3.0](https://github.com/omwn/omw-data).
 
+The scripts adds the following environment variables too [./.env](./.env):
+``` bash
+XL_WSD_PATH=data/xl-wsd
+ENGLISH_MARU_HARD=data/english-hard-wsd
+ENGLISH_RAGANATO=data/WSD_Evaluation_Framework
+```
+
+Whereby:
+- `XL_WSD_PATH` is the folder path to the [XL-WSD dataset.](#multilingual-xl-wsd-2021)
+- `ENGLISH_MARU_HARD` is the folder path to the [English Hard Maru 2022 WSD dataset.](#english-hard-maru-2022-wsd)
+- `ENGLISH_RAGANATO` is the folder path to the [English Raganato 2017 WSD dataset.](#english-raganato-2017-wsd)
+
 ### English Raganato 2017 WSD
 
 **Note** that a corrected version of this dataset was released with [Maru et al. 2022](https://aclanthology.org/2022.acl-long.324/) of which we have this dataset as part of our training and evaluation dataset, see [section English Hard Maru 2022 WSD](#english-hard-maru-2022-wsd), but we keep this non-corrected version as many of the latest systems use this dataset (see [Blevins and Zettlemoyer 2020](https://aclanthology.org/2020.acl-main.95/), [Barba et al. 2021](https://aclanthology.org/2021.naacl-main.371/), and [Zhang et al. 2022](https://aclanthology.org/2022.coling-1.357.pdf)).
