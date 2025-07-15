@@ -197,7 +197,7 @@ class WSLSentence(BaseModel):
         return list_of_values
 
     def validate_wordnet_sense_keys(
-        self, word_net_sense_getter: Callable[str, [wn.Sense | None]]
+        self, word_net_sense_getter: Callable[[str], wn.Sense | None]
     ) -> None:
         """
         Validates that all labels from all annotations are valid WordNet sense
@@ -519,7 +519,7 @@ def wsl_annotations_to_amend(
 def wsl_sentence_generator(
     dataset: DatasetDict,
     split: str,
-    word_net_sense_getter: Callable[str, [wn.Sense | None]],
+    word_net_sense_getter: Callable[[str], wn.Sense | None],
     filter_by_dataset_id: str | None = None,
 ) -> Iterator[WSLSentence]:
     """
