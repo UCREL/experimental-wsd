@@ -70,7 +70,7 @@ bash download_data.sh
 
 For WordNet 3.0 we can use the [Python library wn](https://github.com/goodmami/wn) and to be compatible with previous work we will use the [Princeton WordNet 3.0](https://wordnet.princeton.edu/) and [NLTK](https://www.nltk.org/howto/wordnet.html) version which is [OMW English Wordnet based on WordNet 3.0](https://github.com/omwn/omw-data).
 
-The scripts adds the following environment variables too [./.env](./.env):
+The scripts adds the following environment variables too [./.env](./.env) **Note that the paths will be absolute paths rather than relative as the example shows**:
 ``` bash
 XL_WSD_PATH=data/xl-wsd
 ENGLISH_MARU_HARD=data/english-hard-wsd
