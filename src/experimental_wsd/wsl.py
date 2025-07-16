@@ -2,14 +2,14 @@ import copy
 import re
 from collections import Counter, defaultdict
 from itertools import tee
-from typing import Any, Callable, ClassVar, Iterator, Union
+from typing import Any, Callable, ClassVar, Iterator, Union, Literal
 
 import wn
 from bokeh.models import ColumnDataSource, LabelSet
 from bokeh.plotting import figure
 from bokeh.transform import dodge
 from datasets import DatasetDict
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from experimental_wsd.pos_constants import UniversalDepPOSTags
 
@@ -41,9 +41,7 @@ class Token(BaseModel):
     """
 
     _raw_description = (
-        "The token text. To note that the text matches perfectly with the text "
-        "in the sentence using the character offsets, if and only if both strings "
-        "are lower cased."
+        "The token text."
     )
     _pos_description = (
         "The POS tag of this token. The POS tag should be a "
@@ -87,8 +85,8 @@ class Token(BaseModel):
         """
         Ensures that the POS tags when given are lower cased.
 
-        NOTE: Test if we still need this, I think changing the type of POS tag
-        to ENUM has removed the requirements of this validation step.
+        This is required for matching with the enum values which are all lower 
+        case.
         """
         if isinstance(pos_tag, str):
             pos_tag = pos_tag.lower()
@@ -97,46 +95,91 @@ class Token(BaseModel):
 
 class Annotation(BaseModel):
     """
+    Validates each annotation in the WSL dataset.
 
-    A POS tag in the original WSL data can be missing, this is only the case for
-    MWEs whereby the POS tags for each token in the MWE is different.
-
-    The token offsets for 5 tokens in the original WSL dataset contained the value
+    NOTE: The token offsets for 5 tokens in the original WSL dataset contained the value
     None, however through the character offsets we have managed to recover the
     token offsets. These token offsets were found through the following function
     `get_token_off_for_annotation`.
     """
 
+    _pos_description = (
+        "The POS tag of the token, expected to be a Universal Dependency POS "
+        "tag. We have various mappers between different POS tagsets in "
+        "`experimental_wsd.pos_constants`. NOTE that for MWEs whereby the POS "
+        "tags for each token in the MWE is different the POS tag of the "
+        "annotation is likely to be None."
+    )
+    _offset_description = (
+        "Character offsets of the token text in the original text, expected to "
+        "be a list of two integers the start and end character offset indexes."
+    )
+    _token_off_description = (
+        "Token offsets, this is a list of integers, in most cases it is just "
+        "one integer but can be more than one for MWEs."
+    )
+    _source_description = (
+        "A very specific field for the WSL dataset, represents whether the "
+        "annotation is `NEW` or `OLD`. This is None for all datasets other than WSL."
+    )
+    _label_description = (
+        "A list of WordNet sense keys"
+    )
+    _mwe_description = (
+        "Whether this annotation is a Multi Word Expression"
+    )
     _a_sub_token_description = (
         "True if the annotation text is part of a "
         "whole token, e.g. annotation text is `state` "
         "the linked token is `state/district`"
     )
+    _number_labels_description = "The number of labels"
     _id_description = (
         "The unique ID for this annotation, this is the "
         "sentence id combined with the index of the annotation "
         "{sentence_id}:{annotation_index}"
     )
+    _overlapping_annotations_description = (
+        "A list of annotation ids that lexically overlap, "
+        "e.g. Multi Word Expression and annotation of "
+        "single tokens within the MWE."
+    )
 
-    raw: str
-    lemma: str
-    pos: UniversalDepPOSTags | None
-    offset: list[int]
-    token_off: list[int]
-    source: str
-    labels: list[str]
-    is_mwe: bool
+    raw: str = Field(description="Text of the token")
+    lemma: str = Field(description="Lemma of the token")
+    pos: UniversalDepPOSTags | None = Field(description=_pos_description)
+    offset: list[int] = Field(description=_offset_description)
+    token_off: list[int] = Field(description=_token_off_description)
+    source: Literal["OLD", "NEW"] | None = Field(description=_source_description)
+    labels: list[str] = Field(description=_label_description,
+                              examples=[["carrousel%1:06:01::", "not%4:02:00::"]])
+    is_mwe: bool = Field(description=_mwe_description)
     a_sub_token: bool = Field(description=_a_sub_token_description)
-    number_labels: int
-    id: str = Field(description=_id_description, examples=[""])
-    overlapping_annotations: list[str]
+    number_labels: int = Field(description=_number_labels_description)
+    id: str = Field(description=_id_description,
+                    examples=["semeval2015.d003.s023:4"])
+    overlapping_annotations: list[str] = Field(description=_overlapping_annotations_description,
+                                               examples=[["semeval2015.d003.s023:3", "semeval2015.d003.s023:4"]])
 
     @field_validator("pos", mode="before")
     @classmethod
     def lower_case_pos_tags(cls, pos_tag: str | None) -> str | None:
+        """
+        Ensures that the POS tags when given are lower cased.
+
+        This is required for matching with the enum values which are all lower 
+        case.
+        """
         if isinstance(pos_tag, str):
             pos_tag = pos_tag.lower()
         return pos_tag
+    
+    @field_validator("source", mode="before")
+    @classmethod
+    def upper_case_source(cls, source: str | None) -> str | None:
+        if isinstance(source, str):
+            source = source.upper()
+        return source
 
     @field_validator("offset", mode="after")
     @classmethod
@@ -226,6 +269,37 @@ class WSLSentence(BaseModel):
                         f"{self.sentence_id} is not a valid "
                         "Word Net sense key."
                     )
+                
+    @model_validator(mode='after')
+    def check_token_annotation_offsets(self):
+        """
+        Ensures that the text when using the character offsets from 
+        `self.tokens` and `self.annotations` match the text of the token and 
+        annotation. If they do not match it raises a ValueError.
+
+        NOTE: When matching we match after both text values have been lower 
+        cased.
+
+        Raises:
+            ValueError: If the character offset text does not match the Token 
+            or Annotation text. 
+        """
+
+        name_data = [('token', self.tokens),
+                     ('annotation', self.annotations)]
+        for data_name, data in name_data:
+            for data_instance in data:
+                start_offset, end_offset = data_instance.offset
+                text_from_offset = self.text[start_offset:end_offset]
+                data_text = data_instance.raw
+                if text_from_offset.lower() != data_text.lower():
+                    raise ValueError(
+                        f"The raw {data_name} text: {data_text} does not "
+                        f"match the text taken from the {data_name} "
+                        f"offsets: {text_from_offset} "
+                        f"This is found for the sentence ID: {self.sentence_id}"
+                    )
+        return self
 
     def get_content_tokens(self) -> list[Token]:
         """
@@ -560,15 +634,13 @@ def wsl_sentence_generator(
 
     Raises:
         ValueError: If the sentence ID cannot be validated.
-        ValueError: If a token text does not match the token offset text for
-            both the tokens and annotations.
         ValueError: Any Pydantic validation error generated when the Pydantic
             object cannot be created. This will come from either `WSLID`,
             `Token`, `Annotation`, or `WSLSentence`.
     """
     split_dataset = dataset[split]
 
-    for sample_indx, sample in enumerate(split_dataset):
+    for sample in split_dataset:
         text = sample["text"]
         sentence_id = sample["sentence_id"]
         tokens = sample["tokens"]
@@ -604,35 +676,11 @@ def wsl_sentence_generator(
         validated_annotations: list[Annotation] = []
 
         for token in tokens:
-            start_offset, end_offset = token["offset"]
-            text_from_offset = text[start_offset:end_offset]
-            token_text = token["raw"]
-            if text_from_offset.lower() != token_text.lower():
-                raise ValueError(
-                    f"The raw token text: {token_text} does not "
-                    "match the text taken from the token "
-                    f"offsets: {text_from_offset} "
-                    f"This is found in the data split: {split} "
-                    f"for sample index: {sample_indx} in "
-                    f"sentence id: {sentence_id}"
-                )
             # Placeholder until we have the sentence annotations.
             token["is_content_word"] = False
             validated_tokens.append(Token.model_validate(token))
 
         for index, annotation in enumerate(annotations):
-            start_offset, end_offset = annotation["offset"]
-            text_from_offset = text[start_offset:end_offset]
-            token_text = annotation["raw"]
-            if text_from_offset.lower() != token_text.lower():
-                raise ValueError(
-                    f"The raw annotation token text: {token_text} does not "
-                    "match the text taken from the token "
-                    f"offsets: {text_from_offset} "
-                    f"This is found in the data split: {split} "
-                    f"for sample index: {sample_indx} in "
-                    f"sentence id: {sentence_id}"
-                )
             if not annotation["token_off"]:
                 token_offset = get_token_off_for_annotation(
                     annotation["offset"], validated_tokens
