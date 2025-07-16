@@ -8,13 +8,35 @@ dependencies = [
     "bokeh>=3.7.3",
     "datasets>=3.6.0",
     "notebook>=7.4.3",
+    "pip>=25.1.1",
     "polars>=1.30.0",
     "pyarrow>=20.0.0",
     "pydantic>=2.11.7",
     "python-dotenv>=1.1.1",
+    "spacy[cuda128]>=3.8.7",
     "typer>=0.16.0",
     "wn>0.12.0",
+    "torch>=2.7.1",
+    "transformers[sentencepiece]>=4.53.2",
+    "en-core-web-trf",
 ]
+
+[tool.uv.sources]
+torch = [
+  { index = "pytorch-cpu", marker = "sys_platform != 'linux'" },
+  { index = "pytorch-cu128", marker = "sys_platform == 'linux'" },
+]
+en-core-web-trf = { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_trf-3.8.0/en_core_web_trf-3.8.0.tar.gz" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
 
 [build-system]
 requires = ["hatchling"]
