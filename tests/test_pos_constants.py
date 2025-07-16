@@ -25,7 +25,7 @@ def test_word_net_pos_tags():
 
 def test_uni_dep_to_word_net_pos_tags():
     assert 5 == len(UNI_DEP_TO_WORDNET_POS_TAGS)
-    
+
     assert UNI_DEP_TO_WORDNET_POS_TAGS["noun"] == "n"
     assert UNI_DEP_TO_WORDNET_POS_TAGS["verb"] == "v"
     assert UNI_DEP_TO_WORDNET_POS_TAGS["adj"] == "a"
