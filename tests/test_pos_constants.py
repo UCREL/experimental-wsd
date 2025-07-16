@@ -24,13 +24,10 @@ def test_word_net_pos_tags():
 
 
 def test_uni_dep_to_word_net_pos_tags():
-    # pyrefly: ignore[no-matching-overload]
-    assert 4 == len(UNI_DEP_TO_WORDNET_POS_TAGS)
-    # pyrefly: ignore[bad-argument-type]
+    assert 5 == len(UNI_DEP_TO_WORDNET_POS_TAGS)
+    
     assert UNI_DEP_TO_WORDNET_POS_TAGS["noun"] == "n"
-    # pyrefly: ignore[bad-argument-type]
     assert UNI_DEP_TO_WORDNET_POS_TAGS["verb"] == "v"
-    # pyrefly: ignore[bad-argument-type]
     assert UNI_DEP_TO_WORDNET_POS_TAGS["adj"] == "a"
-    # pyrefly: ignore[bad-argument-type]
     assert UNI_DEP_TO_WORDNET_POS_TAGS["adv"] == "r"
+    assert UNI_DEP_TO_WORDNET_POS_TAGS["propn"] == "n"

@@ -57,4 +57,22 @@ UNI_DEP_TO_WORDNET_POS_TAGS = {
     UniversalDepPOSTags.VERB: WordNetPOSTags.v,
     UniversalDepPOSTags.ADJ: WordNetPOSTags.a,
     UniversalDepPOSTags.ADV: WordNetPOSTags.r,
+    UniversalDepPOSTags.PROPN: WordNetPOSTags.n
+}
+
+# Should match `NOUN` to UniversalDepPOSTags.PROPN as 
+# the SemCor `NOUN` includes proper nouns.
+SEMCOR_TO_UNI_DEP_POS_TAGS = {
+    ".": UniversalDepPOSTags.PUNCT,
+    "ADJ": UniversalDepPOSTags.ADJ,
+    "ADP": UniversalDepPOSTags.ADP,
+    "ADV": UniversalDepPOSTags.ADV,
+    "CONJ": UniversalDepPOSTags.CCONJ,
+    "DET": UniversalDepPOSTags.DET,
+    "NOUN": UniversalDepPOSTags.NOUN,
+    "NUM": UniversalDepPOSTags.NUM,
+    "PRON": UniversalDepPOSTags.PRON,
+    "PRT": UniversalDepPOSTags.PART,
+    "VERB": UniversalDepPOSTags.VERB,
+    "X": UniversalDepPOSTags.X
 }
