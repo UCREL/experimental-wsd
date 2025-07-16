@@ -2,7 +2,7 @@ import copy
 import re
 from collections import Counter, defaultdict
 from itertools import tee
-from typing import Any, Callable, ClassVar, Iterator, Union, Literal
+from typing import Any, Callable, ClassVar, Iterator, Literal, Union
 
 import wn
 from bokeh.models import ColumnDataSource, LabelSet
@@ -40,9 +40,7 @@ class Token(BaseModel):
     Validates each token in the WSL dataset.
     """
 
-    _raw_description = (
-        "The token text."
-    )
+    _raw_description = "The token text."
     _pos_description = (
         "The POS tag of this token. The POS tag should be a "
         "Universal Dependency POS tag."
@@ -85,7 +83,7 @@ class Token(BaseModel):
         """
         Ensures that the POS tags when given are lower cased.
 
-        This is required for matching with the enum values which are all lower 
+        This is required for matching with the enum values which are all lower
         case.
         """
         if isinstance(pos_tag, str):
@@ -122,12 +120,8 @@ class Annotation(BaseModel):
         "A very specific field for the WSL dataset, represents whether the "
         "annotation is `NEW` or `OLD`. This is None for all datasets other than WSL."
     )
-    _label_description = (
-        "A list of WordNet sense keys"
-    )
-    _mwe_description = (
-        "Whether this annotation is a Multi Word Expression"
-    )
+    _label_description = "A list of WordNet sense keys"
+    _mwe_description = "Whether this annotation is a Multi Word Expression"
     _a_sub_token_description = (
         "True if the annotation text is part of a "
         "whole token, e.g. annotation text is `state` "
@@ -151,15 +145,18 @@ class Annotation(BaseModel):
     offset: list[int] = Field(description=_offset_description)
     token_off: list[int] = Field(description=_token_off_description)
     source: Literal["OLD", "NEW"] | None = Field(description=_source_description)
-    labels: list[str] = Field(description=_label_description,
-                              examples=[["carrousel%1:06:01::", "not%4:02:00::"]])
+    labels: list[str] = Field(
+        description=_label_description,
+        examples=[["carrousel%1:06:01::", "not%4:02:00::"]],
+    )
     is_mwe: bool = Field(description=_mwe_description)
     a_sub_token: bool = Field(description=_a_sub_token_description)
     number_labels: int = Field(description=_number_labels_description)
-    id: str = Field(description=_id_description,
-                    examples=["semeval2015.d003.s023:4"])
-    overlapping_annotations: list[str] = Field(description=_overlapping_annotations_description,
-                                               examples=[["semeval2015.d003.s023:3", "semeval2015.d003.s023:4"]])
+    id: str = Field(description=_id_description, examples=["semeval2015.d003.s023:4"])
+    overlapping_annotations: list[str] = Field(
+        description=_overlapping_annotations_description,
+        examples=[["semeval2015.d003.s023:3", "semeval2015.d003.s023:4"]],
+    )
 
     @field_validator("pos", mode="before")
     @classmethod
@@ -167,13 +164,13 @@ class Annotation(BaseModel):
         """
         Ensures that the POS tags when given are lower cased.
 
-        This is required for matching with the enum values which are all lower 
+        This is required for matching with the enum values which are all lower
         case.
         """
         if isinstance(pos_tag, str):
             pos_tag = pos_tag.lower()
         return pos_tag
-    
+
     @field_validator("source", mode="before")
     @classmethod
     def upper_case_source(cls, source: str | None) -> str | None:
@@ -269,24 +266,23 @@ class WSLSentence(BaseModel):
                         f"{self.sentence_id} is not a valid "
                         "Word Net sense key."
                     )
-                
-    @model_validator(mode='after')
+
+    @model_validator(mode="after")
     def check_token_annotation_offsets(self):
         """
-        Ensures that the text when using the character offsets from 
-        `self.tokens` and `self.annotations` match the text of the token and 
+        Ensures that the text when using the character offsets from
+        `self.tokens` and `self.annotations` match the text of the token and
         annotation. If they do not match it raises a ValueError.
 
-        NOTE: When matching we match after both text values have been lower 
+        NOTE: When matching we match after both text values have been lower
         cased.
 
         Raises:
-            ValueError: If the character offset text does not match the Token 
-            or Annotation text. 
+            ValueError: If the character offset text does not match the Token
+            or Annotation text.
         """
 
-        name_data = [('token', self.tokens),
-                     ('annotation', self.annotations)]
+        name_data = [("token", self.tokens), ("annotation", self.annotations)]
         for data_name, data in name_data:
             for data_instance in data:
                 start_offset, end_offset = data_instance.offset
