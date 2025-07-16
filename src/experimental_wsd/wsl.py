@@ -623,7 +623,7 @@ def wsl_sentence_generator(
             `https://wn.readthedocs.io/en/latest/api/wn.compat.sensekey.html`
         filter_by_dataset_id (Union[str, None]): Will filter the sentences so that
             only sentence from the given dataset id will be yielded. If None no
-            filtering is applied.
+            filtering is applied. Default is None.
     Returns:
         Iterator[WSLSentence]: An iterator of formatted and validated sentence
             level data from the given split of the given WSL dataset.
