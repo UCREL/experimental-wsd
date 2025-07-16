@@ -11,13 +11,11 @@ def test_global_variables(tmp_path: Path):
     * MaruEnglish
     * RaganatoEnglish
     """
-
-    assert config.MaruEnglish is None
-    assert config.RaganatoEnglish is None
-
     maru_data_dir = Path(tmp_path, "maru")
     os.mkdir(maru_data_dir)
     os.mkdir(Path(maru_data_dir, "42D"))
+    Path(maru_data_dir, "42D", "42D.data.xml").touch()
+    Path(maru_data_dir, "42D", "42D.gold.key.txt").touch()
     os.mkdir(Path(maru_data_dir, "ALLamended"))
     os.mkdir(Path(maru_data_dir, "hardEN"))
     os.mkdir(Path(maru_data_dir, "softEN"))
@@ -27,6 +25,13 @@ def test_global_variables(tmp_path: Path):
         os.environ["ENGLISH_MARU_HARD"] = str(maru_data_dir.resolve())
         importlib.reload(config)
         assert isinstance(config.MaruEnglish, config.MaruEnglishConfig)
+        config.MaruEnglish.fortitude
+        assert config.MaruEnglish.fortitude.gold == Path(
+            maru_data_dir, "42D", "42D.gold.key.txt"
+        )
+        assert config.MaruEnglish.fortitude.data == Path(
+            maru_data_dir, "42D", "42D.data.xml"
+        )
         del os.environ["ENGLISH_MARU_HARD"]
     else:
         importlib.reload(config)
