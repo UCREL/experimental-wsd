@@ -235,6 +235,7 @@ if os.environ.get("ENGLISH_RAGANATO"):
         data_directory=os.environ.get("ENGLISH_RAGANATO")
     )
 
+# Used to set where the processed data should be stored.
 DATA_PROCESSING_DIR = Path(
     os.environ.get(
         "EXPERIMENTAL_WSD_DATA_PROCESSING_DIR",
