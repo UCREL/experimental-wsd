@@ -234,3 +234,10 @@ if os.environ.get("ENGLISH_RAGANATO"):
     RaganatoEnglish = RaganatoEnglishConfig(
         data_directory=os.environ.get("ENGLISH_RAGANATO")
     )
+
+DATA_PROCESSING_DIR = Path(
+    os.environ.get(
+        "EXPERIMENTAL_WSD_DATA_PROCESSING_DIR",
+        Path(Path.home(), ".cache", "experimental_wsd"),
+    )
+)

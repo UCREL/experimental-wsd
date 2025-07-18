@@ -59,6 +59,18 @@ To download the [WSL dataset](#word-sense-linking-wsl-bejgu-et-al-2024) this req
 HF_TOKEN=xxxxxxx
 ```
 
+When training models we make use of a cache directory which by default is set too:
+
+``` bash
+$HOME/.cache/experimental_wsd
+```
+
+This cache directory path can be overridden by setting it within the environment variable `EXPERIMENTAL_WSD_DATA_PROCESSING_DIR` for instance you could add the following to the .env and then make sure you run `from dotenv import load_dotenv; load_dotenv()` in your Python script to ensure that the environment variable is loaded:
+
+``` bash
+EXPERIMENTAL_WSD_DATA_PROCESSING_DIR="A PATH"
+```
+
 ## Data
 
 To download all of the training and evaluation data to [./data](./data) listed below run the following:
