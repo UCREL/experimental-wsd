@@ -13,12 +13,12 @@ dependencies = [
     "pyarrow>=20.0.0",
     "pydantic>=2.11.7",
     "python-dotenv>=1.1.1",
-    "spacy[cuda128]>=3.8.7",
     "typer>=0.16.0",
     "wn>0.12.0",
     "torch>=2.7.1",
     "transformers[sentencepiece]>=4.53.2",
     "en-core-web-trf",
+    "spacy>=3.8.7",
 ]
 
 [tool.uv.sources]
