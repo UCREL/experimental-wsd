@@ -1,9 +1,11 @@
 import json
 import logging
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Iterator
 
+import torch
 from pydantic import BaseModel
+from torch.utils.data import Sampler
 from transformers import PreTrainedTokenizerFast
 
 logger = logging.getLogger(__name__)
@@ -97,3 +99,74 @@ def read_from_jsonl_file(file_path: Path) -> Iterable[dict[Any, Any]]:
             line = line.strip()
             json_data = json.loads(line)
             yield json_data
+
+
+class AscendingSequenceLengthBatchSampler(Sampler[list[int]]):
+    """
+    A sampler that generates batch indexes in ascending order of length according
+    to the `length_key`. In addition these ascending order or length batches can
+    be generated in random order with or without replacement. For instances
+    onces all of the batch indexes have been created we then perform a random order
+    index so that the batches still contain samples that have a similar length
+    according to the `length_key`.
+    """
+
+    def __init__(
+        self,
+        data: list[dict[str, Any]],
+        batch_size: int,
+        length_key: str,
+        random: bool = True,
+        with_replacement: bool = False,
+    ) -> None:
+        """
+        Args:
+            data (list[dict[str, Any]]): The data to batch. The outer list represents
+                the number of samples in the dataset. The inner dictionary represents
+                the data, e.g. `input_ids`, `labels`, etc.
+            batch_size (int): The batch size.
+            length_key (str): The key that determines how long a sample is, this
+                key should be a key within the sample's dictionary, e.g. `input_ids`,
+                `labels`, etc.
+            random (bool): If True then the batches with similar lengths will be
+                yielded in random order rather than the ascending order, this is
+                useful when you want to have similar sized batches but in random
+                order. When False batches will be in strict ascending order, this
+                is useful in want to have something like criculuim learning,
+                potentially the easiest and shortest samples first. Default
+                True.
+            with_replacement (bool): When `random` is `True` then this sets the
+                `replacement` argument. Default False.
+        """
+        self.data = data
+        self.batch_size = batch_size
+        self.length_key = length_key
+        self.random = random
+        self.with_replacement = with_replacement
+
+    def __len__(self) -> int:
+        return (len(self.data) + self.batch_size - 1) // self.batch_size
+
+    def __iter__(self) -> Iterator[list[int]]:
+        sizes = torch.tensor([len(x[self.length_key]) for x in self.data])
+        number_batches = len(self)
+        batch_index_chunks = list(torch.chunk(torch.argsort(sizes), number_batches))
+        indexes_of_batch_index_chunks = torch.arange(
+            0, number_batches, dtype=torch.float
+        )
+        if self.random:
+            random_indexes_of_batch_index_chunks = torch.multinomial(
+                indexes_of_batch_index_chunks,
+                number_batches,
+                replacement=self.with_replacement,
+            )
+            indexes_of_batch_index_chunks = random_indexes_of_batch_index_chunks
+        else:
+            # Indexes have to be of dtype long and not float, hence the conversion.
+            indexes_of_batch_index_chunks = indexes_of_batch_index_chunks.to(
+                dtype=torch.long
+            )
+
+        for index_of_batch_index_chunks in indexes_of_batch_index_chunks:
+            batch_index_chunk = batch_index_chunks[index_of_batch_index_chunks]
+            yield batch_index_chunk.tolist()
