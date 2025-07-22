@@ -2,11 +2,13 @@ from pathlib import Path
 from typing import Iterable
 
 import pytest
+import torch
 from pydantic import BaseModel
 from transformers import AutoTokenizer
 
 from experimental_wsd.training_utils import (
     AscendingSequenceLengthBatchSampler,
+    collate_token_classification_dataset,
     get_prefix_suffix_special_token_indexes,
     read_from_jsonl_file,
     write_to_jsonl,
@@ -105,3 +107,108 @@ def test_ascending_sequence_length_batch_sampler(random: bool, with_replacement:
         assert expected_batch_indexes == batch_indexes
     else:
         assert expected_batch_indexes != batch_indexes
+
+
+@pytest.mark.parametrize(
+    "tokenizer_name", ["FacebookAI/roberta-base", "jhu-clsp/ettin-encoder-17m"]
+)
+@pytest.mark.parametrize("expected_label_pad_id", [-100, 50])
+@pytest.mark.parametrize("expected_attention_pad_id", [0, -51])
+@pytest.mark.parametrize("attention_mask_key", ["attention_mask", "sequence_mask"])
+@pytest.mark.parametrize("label_key_name", ["labels", "label_sequence"])
+@pytest.mark.parametrize("word_ids_key_name", ["word_ids", "token_ids"])
+def test_collate_token_classification_dataset(
+    tokenizer_name: str,
+    expected_label_pad_id: int,
+    expected_attention_pad_id: int,
+    attention_mask_key: str,
+    label_key_name: str,
+    word_ids_key_name: str,
+):
+    test_data = [
+        {
+            "input_ids": list(range(0, 10)),
+            attention_mask_key: [1] * 10,
+            label_key_name: [1] * 10,
+            word_ids_key_name: [1] * 10,
+        },
+        {
+            "input_ids": list(range(0, 8)),
+            attention_mask_key: [1] * 8,
+            label_key_name: [1] * 8,
+            word_ids_key_name: [1] * 8,
+        },
+    ]
+
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
+    assert "right" == tokenizer.padding_side
+
+    attention_mask_keys = set([attention_mask_key])
+    label_keys = set([label_key_name, word_ids_key_name])
+    collate_function = collate_token_classification_dataset(
+        tokenizer,
+        label_pad_id=expected_label_pad_id,
+        attention_pad_id=expected_attention_pad_id,
+        attention_mask_keys=attention_mask_keys,
+        label_keys=label_keys,
+    )
+
+    collated_test_data = collate_function(test_data)
+    expected_collated_data = {
+        "input_ids": torch.tensor(
+            [
+                [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+                [
+                    0,
+                    1,
+                    2,
+                    3,
+                    4,
+                    5,
+                    6,
+                    7,
+                    tokenizer.pad_token_id,
+                    tokenizer.pad_token_id,
+                ],
+            ],
+            dtype=torch.long,
+        ),
+        attention_mask_key: torch.tensor(
+            [
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                [
+                    1,
+                    1,
+                    1,
+                    1,
+                    1,
+                    1,
+                    1,
+                    1,
+                    expected_attention_pad_id,
+                    expected_attention_pad_id,
+                ],
+            ],
+            dtype=torch.long,
+        ),
+        label_key_name: torch.tensor(
+            [
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                [1, 1, 1, 1, 1, 1, 1, 1, expected_label_pad_id, expected_label_pad_id],
+            ],
+            dtype=torch.long,
+        ),
+        word_ids_key_name: torch.tensor(
+            [
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                [1, 1, 1, 1, 1, 1, 1, 1, expected_label_pad_id, expected_label_pad_id],
+            ],
+            dtype=torch.long,
+        ),
+    }
+
+    assert len(expected_collated_data) == len(collated_test_data)
+    for data_key_name, expected_batched_data in expected_collated_data.items():
+        assert (
+            expected_batched_data.tolist() == collated_test_data[data_key_name].tolist()
+        ), data_key_name

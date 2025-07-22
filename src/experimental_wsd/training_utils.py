@@ -1,7 +1,8 @@
 import json
 import logging
+from collections import defaultdict
 from pathlib import Path
-from typing import Any, Iterable, Iterator
+from typing import Any, Callable, Iterable, Iterator
 
 import torch
 from pydantic import BaseModel
@@ -170,3 +171,88 @@ class AscendingSequenceLengthBatchSampler(Sampler[list[int]]):
         for index_of_batch_index_chunks in indexes_of_batch_index_chunks:
             batch_index_chunk = batch_index_chunks[index_of_batch_index_chunks]
             yield batch_index_chunk.tolist()
+
+
+def collate_token_classification_dataset(
+    tokenizer: PreTrainedTokenizerFast,
+    label_keys: set = set(["labels", "word_ids"]),
+    attention_mask_keys: set = set(["attention_mask"]),
+    label_pad_id: int = -100,
+    attention_pad_id: int = 0,
+) -> Callable[[list[dict[str, list[int]]]], dict[str, torch.Tensor]]:
+    """
+    This generates a function that converts a batch, 1 or more samples, of
+    token classification data into format suitable as input into a machine
+    learning model for either training or inference.
+
+    Args:
+        tokenizer (PreTrainedTokenizerFast): The tokenizer used to tokenize
+            the text/pre-tokenized text. This determines the padding side
+            and padding id for any key name that is not in the `label_keys` or
+            `attention_mask_keys`.
+        label_keys (set[str]): The key names in each sample that should be padded
+            with the `label_pad_id`. Default `set([labels, word_ids])`
+        attention_mask_keys (set[str]): The key names in each sample that should be padded
+            with the `attention_pad_id`. Default `set([attention_mask])`
+        label_pad_id (int): The label pad id value. Default is -100.
+        attention_pad_id (int): The attention pad id value. Default is 0.
+    """
+
+    def _collate(data: list[dict[str, list[int]]]) -> dict[str, torch.Tensor]:
+        """
+        Expects a batch, 1 or more samples, of token classification data and
+        returns the data so that the dictionary keys are the same but each value
+        is a torch Tensor containing a batch of data whereby the dimension of each
+        torch tensor is the same, B x M whereby B is the batch size and M is the
+        number of tokens including padding tokens.
+
+        Args:
+            data (list[dict[str, list[int]]]): The outer list is the batch size
+                and each dictionary should contain the same key names.
+        Returns:
+            dict[str, torch.Tensor]: A dictionary that has the key names as in the
+                given argument dictionaries, but each value is a tensor of size
+                B x M whereby B is the batch size and M is the number of tokens
+                including any padding tokens.
+        """
+        padding_side = tokenizer.padding_side
+        padding_token = tokenizer.pad_token_id
+        tensor_lengths = []
+        for instance in data:
+            for key, value in instance.items():
+                tensor_lengths.append(len(value))
+        are_tensors_same_length = all(
+            tensor_lengths[0] == tensor_length for tensor_length in tensor_lengths
+        )
+
+        batched_dict = defaultdict(list)
+        if not are_tensors_same_length:
+            max_length = max(tensor_lengths)
+            for instance in data:
+                for key, value in instance.items():
+                    tensor_value = torch.tensor(instance[key], dtype=torch.long)
+                    padding_id_for_key = padding_token
+                    if key in label_keys:
+                        padding_id_for_key = label_pad_id
+                    if key in attention_mask_keys:
+                        padding_id_for_key = attention_pad_id
+                    pad_length = max_length - tensor_value.size(-1)
+                    if pad_length == 0:
+                        batched_dict[key].append(tensor_value)
+                        continue
+                    pad_tensor = torch.tensor(
+                        [padding_id_for_key] * pad_length, dtype=torch.long
+                    )
+                    if padding_side == "right":
+                        tensor_value = torch.hstack((tensor_value, pad_tensor))
+                    else:
+                        tensor_value = torch.hstack((pad_tensor, tensor_value))
+
+                    batched_dict[key].append(tensor_value)
+
+        tensor_batched_dict = {}
+        for key, value in batched_dict.items():
+            tensor_batched_dict[key] = torch.vstack(value)
+        return tensor_batched_dict
+
+    return _collate
