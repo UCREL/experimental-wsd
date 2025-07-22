@@ -5,7 +5,8 @@ RUN apt-get -y update \
     python3.12 \
     git \
     make \
-    wget
+    wget \
+    openssh-client
 
 ARG USERNAME=gpu
 ARG USER_UID=1001
