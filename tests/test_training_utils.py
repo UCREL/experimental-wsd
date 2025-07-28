@@ -212,3 +212,140 @@ def test_collate_token_classification_dataset(
         assert (
             expected_batched_data.tolist() == collated_test_data[data_key_name].tolist()
         ), data_key_name
+
+    # Test when the samples are the same size, no padding is required, only
+    # converting to torch Tensors.
+    test_data = [
+        {
+            "input_ids": list(range(0, 10)),
+            attention_mask_key: [1] * 10,
+            label_key_name: [1] * 10,
+            word_ids_key_name: [1] * 10,
+        },
+        {
+            "input_ids": list(range(0, 10)),
+            attention_mask_key: [1] * 10,
+            label_key_name: [1] * 10,
+            word_ids_key_name: [1] * 10,
+        },
+    ]
+
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
+    assert "right" == tokenizer.padding_side
+
+    attention_mask_keys = set([attention_mask_key])
+    label_keys = set([label_key_name, word_ids_key_name])
+    collate_function = collate_token_classification_dataset(
+        tokenizer,
+        label_pad_id=expected_label_pad_id,
+        attention_pad_id=expected_attention_pad_id,
+        attention_mask_keys=attention_mask_keys,
+        label_keys=label_keys,
+    )
+
+    collated_test_data = collate_function(test_data)
+    expected_collated_data = {
+        "input_ids": torch.tensor(
+            [
+                [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+                [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+            ],
+            dtype=torch.long,
+        ),
+        attention_mask_key: torch.tensor(
+            [
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+            ],
+            dtype=torch.long,
+        ),
+        label_key_name: torch.tensor(
+            [
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+            ],
+            dtype=torch.long,
+        ),
+        word_ids_key_name: torch.tensor(
+            [
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+            ],
+            dtype=torch.long,
+        ),
+    }
+
+    assert len(expected_collated_data) == len(collated_test_data)
+    for data_key_name, expected_batched_data in expected_collated_data.items():
+        assert (
+            expected_batched_data.tolist() == collated_test_data[data_key_name].tolist()
+        ), data_key_name
+
+    # Test the case of labels being of different length to other inputs
+    # the expected outcome is that we only pad to the maximum length of the labels
+    
+    test_data = [
+        {
+            "input_ids": list(range(0, 10)),
+            attention_mask_key: [1] * 10,
+            label_key_name: [1] * 4,
+            word_ids_key_name: [1] * 10,
+        },
+        {
+            "input_ids": list(range(0, 10)),
+            attention_mask_key: [1] * 10,
+            label_key_name: [1] * 6,
+            word_ids_key_name: [1] * 10,
+        },
+    ]
+
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
+    assert "right" == tokenizer.padding_side
+
+    attention_mask_keys = set([attention_mask_key])
+    label_keys = set([label_key_name, word_ids_key_name])
+    collate_function = collate_token_classification_dataset(
+        tokenizer,
+        label_pad_id=expected_label_pad_id,
+        attention_pad_id=expected_attention_pad_id,
+        attention_mask_keys=attention_mask_keys,
+        label_keys=label_keys,
+    )
+
+    collated_test_data = collate_function(test_data)
+    expected_collated_data = {
+        "input_ids": torch.tensor(
+            [
+                [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+                [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+            ],
+            dtype=torch.long,
+        ),
+        attention_mask_key: torch.tensor(
+            [
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+            ],
+            dtype=torch.long,
+        ),
+        label_key_name: torch.tensor(
+            [
+                [1, 1, 1, 1, expected_label_pad_id, expected_label_pad_id],
+                [1, 1, 1, 1, 1, 1],
+            ],
+            dtype=torch.long,
+        ),
+        word_ids_key_name: torch.tensor(
+            [
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+            ],
+            dtype=torch.long,
+        ),
+    }
+
+    assert len(expected_collated_data) == len(collated_test_data)
+    for data_key_name, expected_batched_data in expected_collated_data.items():
+        assert (
+            expected_batched_data.tolist() == collated_test_data[data_key_name].tolist()
+        ), data_key_name

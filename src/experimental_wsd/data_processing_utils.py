@@ -1,9 +1,10 @@
 from typing import Any
+from collections import Counter
 
 import transformers
 
 
-def align_labels_with_tokens(
+def get_align_labels_with_tokens(
     labels: list[int], word_ids: list[int | None], label_pad_id: int = -100
 ) -> list[int]:
     """
@@ -52,10 +53,11 @@ def align_labels_with_tokens(
     return new_labels
 
 
-def tokenize_and_align_labels(
+def tokenize_pre_processing(
     batched_text_and_labels: dict[str, list[list[str]] | list[list[int]]],
     tokenizer: transformers.PreTrainedTokenizerFast,
     label_pad_id: int = -100,
+    align_labels_with_tokens: bool = False,
 ) -> dict[str, list[list[int]]]:
     """
     Given a dictionary that contains `text` and `is_content_word` keys
@@ -69,8 +71,9 @@ def tokenize_and_align_labels(
     * word_ids -> A list of integers representing a mapping from sub-word token
         to work level token. Any special tokens have a value of `label_pad_id`.
     * labels -> The integer value of `is_content_word`, if a special token exists
-        this will be given the value of `label_pad_id`.
-    All samples for each key should be of the same length.
+        this will be given the value of `label_pad_id` if `align_labels_with_tokens`
+        is True.
+    All samples for each key should be of the same length, except for the labels.
 
     A HuggingFace Datasets mapper function which should be ran in batch mode.
 
@@ -83,7 +86,14 @@ def tokenize_and_align_labels(
         tokenizer (transformers.PreTrainedTokenizerFast): The tokenizer to
             pre-process the tokens.
         label_pad_id (int): The integer value to give to special tokens that should
-            be ignored as a label. Default -100.
+            be ignored as a label. Only applicable when
+            `align_labels_with_tokens` is True as this is when special tokens
+            needs to be considered. Default -100.
+        align_labels_with_tokens (bool): Whether the labels should be aligned
+            with the sub-word tokens they represent, this uses the function
+            `get_align_labels_with_tokens`. If this is True then the length of
+            the labels will be the same as all other returned key values.
+            Default False.
     Returns:
         dict[str, list[list[int]]]: The data pre-processed.
     """
@@ -104,12 +114,29 @@ def tokenize_and_align_labels(
             else:
                 temp_word_ids.append(word_id)
         batched_word_ids.append(temp_word_ids)
-        batched_labels.append(
-            align_labels_with_tokens(is_content_word_labels, word_ids, label_pad_id)
-        )
+        if align_labels_with_tokens:
+            batched_labels.append(
+                get_align_labels_with_tokens(
+                    is_content_word_labels, word_ids, label_pad_id
+                )
+            )
+        else:
+            batched_labels.append(is_content_word_labels)
     tokenized_inputs["labels"] = batched_labels
     tokenized_inputs["word_ids"] = batched_word_ids
     return tokenized_inputs
+
+
+def get_pre_processed_label_statistics(batched_text_and_labels: dict[str, list[list[str]] | list[list[int]]],
+                                       label_key: str,
+                                       label_value_to_ignore: Any):
+    label_data = batched_text_and_labels[label_key]
+    label_counter = Counter()
+    for sample in label_data:
+        label_counter.update(sample)
+    if label_value_to_ignore in label_counter:
+        del label_counter[label_value_to_ignore]
+    return {"label_counts": list(label_counter.elements())}
 
 
 def map_token_text_and_is_content_labels(
