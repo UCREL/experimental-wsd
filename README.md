@@ -71,6 +71,11 @@ This cache directory path can be overridden by setting it within the environment
 EXPERIMENTAL_WSD_DATA_PROCESSING_DIR="A PATH"
 ```
 
+In addition it is helpful to set the following, this avoids a lot of logging messages asking us to set this environment variable, this relates to how HuggingFace runs the tokenizer (I cannot find any official documentation on this variable, therefore set it to True assuming that it will run the tokenization process in parallel which should be quicker).
+``` bash
+TOKENIZERS_PARALLELISM=true
+```
+
 ## Data
 
 To download all of the training and evaluation data to [./data](./data) listed below run the following:
