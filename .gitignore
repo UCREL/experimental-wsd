@@ -3,3 +3,4 @@ data/*
 .python-version
 .env
 __pycache__
+lightning_logs

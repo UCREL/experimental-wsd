@@ -24,5 +24,8 @@
 					   "tamasfe.even-better-toml"]
 		}
   	},
-	"postStartCommand": ["uv", "sync", "&&", "uv", "run", "python -m wn download omw-en:1.4"]
+	"postStartCommand": ["uv", "sync", "&&", "uv", "run", "python -m wn download omw-en:1.4"],
+	"features": {
+    	"ghcr.io/devcontainers/features/sshd:1": {}
+	}
 }
