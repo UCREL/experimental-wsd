@@ -206,6 +206,14 @@ def collate_token_classification_dataset(
         torch tensor is the same, B x M whereby B is the batch size and M is the
         number of tokens including padding tokens.
 
+        NOTE: That the returned torch.Tensors can be of different M lengths as 
+        we use the maximum length of each dictionary key as it's maximum padding 
+        length. This is most likely to occur for the key `labels` if the function 
+        `data_processing_utils.tokenize_pre_processing` has the argument 
+        `align_labels_with_tokens=False`, this is perfectly ok just something 
+        to be aware of. It is very useful for word level (not sub-word token) 
+        classification models.
+
         Args:
             data (list[dict[str, list[int]]]): The outer list is the batch size
                 and each dictionary should contain the same key names.
@@ -217,38 +225,41 @@ def collate_token_classification_dataset(
         """
         padding_side = tokenizer.padding_side
         padding_token = tokenizer.pad_token_id
-        tensor_lengths = []
+        key_tensor_lengths: dict[str, list[int]] = defaultdict(list)
         for instance in data:
             for key, value in instance.items():
-                tensor_lengths.append(len(value))
-        are_tensors_same_length = all(
-            tensor_lengths[0] == tensor_length for tensor_length in tensor_lengths
-        )
+                key_tensor_lengths[key].append(len(value))
 
         batched_dict = defaultdict(list)
-        if not are_tensors_same_length:
-            max_length = max(tensor_lengths)
-            for instance in data:
-                for key, value in instance.items():
-                    tensor_value = torch.tensor(instance[key], dtype=torch.long)
-                    padding_id_for_key = padding_token
-                    if key in label_keys:
-                        padding_id_for_key = label_pad_id
-                    if key in attention_mask_keys:
-                        padding_id_for_key = attention_pad_id
-                    pad_length = max_length - tensor_value.size(-1)
-                    if pad_length == 0:
-                        batched_dict[key].append(tensor_value)
-                        continue
-                    pad_tensor = torch.tensor(
-                        [padding_id_for_key] * pad_length, dtype=torch.long
-                    )
-                    if padding_side == "right":
-                        tensor_value = torch.hstack((tensor_value, pad_tensor))
-                    else:
-                        tensor_value = torch.hstack((pad_tensor, tensor_value))
 
+        # max_length = max(tensor_lengths)
+        key_max_length = {
+            key: max(tensor_legnths)
+            for key, tensor_legnths in key_tensor_lengths.items()
+        }
+        for instance in data:
+            for key, value in instance.items():
+                max_length = key_max_length[key]
+
+                tensor_value = torch.tensor(instance[key], dtype=torch.long)
+                padding_id_for_key = padding_token
+                if key in label_keys:
+                    padding_id_for_key = label_pad_id
+                if key in attention_mask_keys:
+                    padding_id_for_key = attention_pad_id
+                pad_length = max_length - tensor_value.size(-1)
+                if pad_length == 0:
                     batched_dict[key].append(tensor_value)
+                    continue
+                pad_tensor = torch.tensor(
+                    [padding_id_for_key] * pad_length, dtype=torch.long
+                )
+                if padding_side == "right":
+                    tensor_value = torch.hstack((tensor_value, pad_tensor))
+                else:
+                    tensor_value = torch.hstack((pad_tensor, tensor_value))
+
+                batched_dict[key].append(tensor_value)
 
         tensor_batched_dict = {}
         for key, value in batched_dict.items():
