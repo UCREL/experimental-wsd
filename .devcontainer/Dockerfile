@@ -9,6 +9,7 @@ RUN apt-get -y update \
     wget \
     vim \
     build-essential \
+    openssh-client \
     && rm -rf /var/lib/apt/lists/*
 
 #ARG USERNAME=gpu
