@@ -5,6 +5,7 @@ from experimental_wsd.data_processing_utils import (
     get_align_labels_with_tokens,
     map_token_text_and_is_content_labels,
     tokenize_pre_processing,
+    map_token_sense_indexes
 )
 
 
@@ -56,3 +57,26 @@ def test_tokenize_pre_processing(align_labels_with_tokens: bool, label_pad_id: i
     assert expected_output == tokenize_pre_processing(
         test_data, tokenizer, label_pad_id, align_labels_with_tokens
     )
+
+def test_map_token_sense_indexes():
+    test_data = {
+        "tokens": [
+            {"raw": "This", "is_content_word": False},
+            {"raw": "is", "is_content_word": False},
+            {"raw": "a", "is_content_word": False},
+            {"raw": "test", "is_content_word": True},
+        ],
+        "annotations": [
+            {"lemma": "be", "pos": "VERB", "token_off": [1], "labels": ["omw-en-02604760-v", "omw-en-02616386-v"]},
+            {"lemma": "a_test", "pos": "n", "token_off": [2, 3], "labels": ["review%2:31:00::"]},
+            {"lemma": "this_is_a", "pos": None, "token_off": [0,1,2], "labels": ["review%2:31:00::"]}
+        ]
+    }
+    expected_output = {
+        "text": ["This", "is", "a", "test"],
+        "lemmas": ["be", "be", "a_test", "this_is_a"],
+        "pos_tags": ["VERB", "VERB", "n", None],
+        "token_offsets": [(1,2), (1,2), (2, 4), (0, 3)],
+        "labels": ["omw-en-02604760-v", "omw-en-02616386-v", "review%2:31:00::", "review%2:31:00::"]
+    }
+    assert expected_output == map_token_sense_indexes(test_data)
