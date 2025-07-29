@@ -1,8 +1,5 @@
-from typing import Any
 from collections import Counter
-from typing import Callable
-
-import wn
+from typing import Any
 
 import transformers
 
@@ -130,30 +127,31 @@ def tokenize_pre_processing(
     return tokenized_inputs
 
 
-def get_pre_processed_label_statistics(batched_text_and_labels: dict[str, list[list[str]] | list[list[int]]],
-                                       label_key: str,
-                                       label_value_to_ignore: Any
-                                       ) -> dict[str, list[Any]]:
+def get_pre_processed_label_statistics(
+    batched_text_and_labels: dict[str, list[list[str]] | list[list[int]]],
+    label_key: str,
+    label_value_to_ignore: Any,
+) -> dict[str, list[Any]]:
     """
-    Returns a dictionary with one key `label_counts` that contains all of the 
-    labels as one list. This list can then be given to a Counter object to 
+    Returns a dictionary with one key `label_counts` that contains all of the
+    labels as one list. This list can then be given to a Counter object to
     create a dictionary of unique labels to counts.
 
-    This is a useful function for getting label weights for loss functions. 
+    This is a useful function for getting label weights for loss functions.
 
     A HuggingFace Datasets mapper function which be ran in batch mode.
 
-    NOTE: this should be refactored to be more efficient and only return label 
+    NOTE: this should be refactored to be more efficient and only return label
     counts rather than all labels.
 
     Args:
-        batched_text_and_labels (dict[str, list[list[str]] | list[list[int]]]): The 
+        batched_text_and_labels (dict[str, list[list[str]] | list[list[int]]]): The
             data that contains the `label_key`
         label_key (str): The key that represents the labelled data.
         label_value_to_ignore (Any): A label value to ignore.
     Returns:
-        dict[str, list[Any]]: A dictionary with one key, `label_counts`, that contains 
-            all of the label values in the given batched text and labels data 
+        dict[str, list[Any]]: A dictionary with one key, `label_counts`, that contains
+            all of the label values in the given batched text and labels data
             as one list.
     """
     label_data = batched_text_and_labels[label_key]
@@ -197,8 +195,9 @@ def map_token_text_and_is_content_labels(
         is_content.append(int(token["is_content_word"]))
     return {"text": token_text, "is_content_word": is_content}
 
-def map_token_sense_indexes(
-        wsl_instance: dict[str, Any]
+
+def map_token_sense_labels(
+    wsl_instance: dict[str, Any],
 ) -> dict[str, list[str] | list[str | None] | list[tuple[int, int]]]:
     """
     Given a sample that comes from a `wsl.WSLSentence` it will return a dictionary
@@ -209,30 +208,30 @@ def map_token_sense_indexes(
         list[str]
     `pos_tags`: A list of POS tags which represent the POS tags of each annotation.
         list[str | None]. When None we do not know the POS tag of the label data.
-    `token_offsets`: A list of tuples which contain token start and end indexes 
+    `token_offsets`: A list of tuples which contain token start and end indexes
         for each annotation. One for each annotation. list[tuple[int, int]]
-    `labels`: A list of WordNet sense keys that represent a gold label for the 
+    `labels`: A list of WordNet sense keys that represent a gold label for the
         given annotation, e.g. `[`carrousel%1:06:01::`]`. One for each annotation.
         list[str]
-    
+
     A HuggingFace Datasets mapper function which be ran in non-batch mode.
 
     Args:
         wsl_instance (dict[str, Any]): A wsl.WSLSentence in python dictionary
             format. This can be achieved using wsl.WSLSentence.model_dump().
             As a minimum this should be a dictionary with the key `tokens`
-            which contains a list of dictionaries containing `raw` key whereby 
-            `raw` is the token text. The dictionary also has to contain another 
-            key `annotations` which contains a list of dictionaries containing 
-            `lemma` (str), `pos` (str | None),  `token_off` 
-            (list[int] each representing a token index that it relates too), 
-            and `labels` (list[str] the WordNet sense key [`carrousel%1:06:01::`]) 
-            keys which represents the annotation data from the sample. 
+            which contains a list of dictionaries containing `raw` key whereby
+            `raw` is the token text. The dictionary also has to contain another
+            key `annotations` which contains a list of dictionaries containing
+            `lemma` (str), `pos` (str | None),  `token_off`
+            (list[int] each representing a token index that it relates too),
+            and `labels` (list[str] the WordNet sense key [`carrousel%1:06:01::`])
+            keys which represents the annotation data from the sample.
     Returns:
-        dict[str, list[str] | list[str | None] | list[tuple[int, int]]]: A 
-            dictionary of five keys; `text`, `lemmas`, `pos_tags`, `token_offsets`, 
-            and `labels`. NOTE that the length of the `text` will be different to 
-            the length of the other list values however all other list values should 
+        dict[str, list[str] | list[str | None] | list[tuple[int, int]]]: A
+            dictionary of five keys; `text`, `lemmas`, `pos_tags`, `token_offsets`,
+            and `labels`. NOTE that the length of the `text` will be different to
+            the length of the other list values however all other list values should
             be the same length as they represent the annotations from the sample.
     """
     token_text: list[str] = []
@@ -243,8 +242,8 @@ def map_token_sense_indexes(
     for token in wsl_instance["tokens"]:
         token_text.append(token["raw"])
     for annotation in wsl_instance["annotations"]:
-        for label in annotation['labels']:
-            token_offsets = annotation['token_off']
+        for label in annotation["labels"]:
+            token_offsets = annotation["token_off"]
             number_of_token_offsets = len(token_offsets)
             assert number_of_token_offsets > 0
             start_token_offset = token_offsets[0]
@@ -256,4 +255,10 @@ def map_token_sense_indexes(
             labels.append(label)
             lemmas.append(annotation["lemma"])
             pos_tags.append(annotation["pos"])
-    return {"text": token_text, "lemmas": lemmas, "pos_tags": pos_tags, "token_offsets": token_start_end_offsets, "labels": labels}
+    return {
+        "text": token_text,
+        "lemmas": lemmas,
+        "pos_tags": pos_tags,
+        "token_offsets": token_start_end_offsets,
+        "labels": labels,
+    }

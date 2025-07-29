@@ -283,7 +283,7 @@ def test_collate_token_classification_dataset(
 
     # Test the case of labels being of different length to other inputs
     # the expected outcome is that we only pad to the maximum length of the labels
-    
+
     test_data = [
         {
             "input_ids": list(range(0, 10)),

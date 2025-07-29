@@ -617,6 +617,7 @@ dependencies = [
     { name = "torch", version = "2.7.1+cu128", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "sys_platform == 'linux'" },
     { name = "torchmetrics" },
     { name = "transformers", extra = ["sentencepiece"] },
+    { name = "triton" },
     { name = "typer" },
     { name = "wn" },
 ]
@@ -646,6 +647,7 @@ requires-dist = [
     { name = "torch", marker = "sys_platform == 'linux'", specifier = ">=2.7.1", index = "https://download.pytorch.org/whl/cu128" },
     { name = "torchmetrics", specifier = ">=1.7.4" },
     { name = "transformers", extras = ["sentencepiece"], specifier = ">=4.53.2" },
+    { name = "triton", specifier = ">=3.3.1" },
     { name = "typer", specifier = ">=0.16.0" },
     { name = "wn", specifier = ">0.12.0" },
 ]
@@ -3020,7 +3022,7 @@ name = "triton"
 version = "3.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "setuptools", marker = "sys_platform == 'linux'" },
+    { name = "setuptools" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/24/5f/950fb373bf9c01ad4eb5a8cd5eaf32cdf9e238c02f9293557a2129b9c4ac/triton-3.3.1-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:9999e83aba21e1a78c1f36f21bce621b77bcaa530277a50484a7cb4a822f6e43", size = 155669138, upload-time = "2025-05-29T23:39:51.771Z" },

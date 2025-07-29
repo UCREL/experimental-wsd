@@ -1,13 +1,12 @@
+import inspect
 import logging
 from collections import OrderedDict
-import inspect
 
 import lightning as L
 import torch
+from torchmetrics.classification import MulticlassAccuracy, MulticlassF1Score
 from transformers import AutoModel
 from transformers.modeling_outputs import BaseModelOutputWithPoolingAndCrossAttentions
-from torchmetrics.classification import MulticlassAccuracy, MulticlassF1Score
-from torchmetrics.classification.stat_scores import MulticlassStatScores
 
 from experimental_wsd.nn.scalar_mix import ScalarMix
 from experimental_wsd.nn.utils import tiny_value_of_dtype
@@ -16,24 +15,19 @@ logger = logging.getLogger(__name__)
 
 
 class TokenClassifier(L.LightningModule):
-
     @staticmethod
     def _get_base_model(base_model_name: str) -> AutoModel:
         """
-        Checks if a pooling layer would be added when loaded and if so the 
-        pooling layer is removed which will remove the number of parameters in 
+        Checks if a pooling layer would be added when loaded and if so the
+        pooling layer is removed which will remove the number of parameters in
         the model and the number of parameters used.
         """
-        base_model = AutoModel.from_pretrained(
-            base_model_name
-        )
+        base_model = AutoModel.from_pretrained(base_model_name)
         base_model_type = type(base_model)
-        if 'add_pooling_layer' in inspect.getfullargspec(base_model_type.__init__).args:
-            return AutoModel.from_pretrained(
-            base_model_name, add_pooling_layer=False
-            )
+        if "add_pooling_layer" in inspect.getfullargspec(base_model_type.__init__).args:
+            return AutoModel.from_pretrained(base_model_name, add_pooling_layer=False)
         return base_model
-   
+
     def __init__(
         self,
         base_model_name: str,
@@ -45,7 +39,7 @@ class TokenClassifier(L.LightningModule):
         batch_first: bool = True,
         number_classes: int = 2,
         classifier_dropout: float | None = 0.1,
-        label_weights: list[int] | None = None
+        label_weights: list[int] | None = None,
     ) -> None:
         """
         Args:
@@ -145,30 +139,34 @@ class TokenClassifier(L.LightningModule):
         # Where C is the number of classes in this case 1 class.
         self.label_weights = label_weights
         if self.label_weights:
-            self.label_weights = torch.tensor(label_weights, dtype=torch.float, device=self.device)
-        self.loss_fn = torch.nn.CrossEntropyLoss(weight=self.label_weights, reduction="mean", ignore_index=-100)
+            self.label_weights = torch.tensor(
+                label_weights, dtype=torch.float, device=self.device
+            )
+        self.loss_fn = torch.nn.CrossEntropyLoss(
+            weight=self.label_weights, reduction="mean", ignore_index=-100
+        )
 
-        
-        split_names = ['train', 'validation', 'test']
+        split_names = ["train", "validation", "test"]
         standard_metric_kwargs = {
             "num_classes": self.number_classes,
             "ignore_index": -100,
             "multidim_average": "global",
-            "average": "macro"
+            "average": "macro",
         }
         self.metric_names = ["macro_accuracy", "macro_f1"]
         all_metric_class_args = [
             (MulticlassAccuracy, standard_metric_kwargs),
-            (MulticlassF1Score, standard_metric_kwargs)
+            (MulticlassF1Score, standard_metric_kwargs),
         ]
         for split_name in split_names:
-            for metric_name, metric_class_args in zip(self.metric_names, all_metric_class_args):
+            for metric_name, metric_class_args in zip(
+                self.metric_names, all_metric_class_args
+            ):
                 metric_class, metric_args = metric_class_args
                 metric = metric_class(**metric_args)
-                setattr(self, f'{split_name}_{metric_name}', metric)
+                setattr(self, f"{split_name}_{metric_name}", metric)
 
         self.save_hyperparameters()
-
 
     def forward(
         self,
@@ -217,7 +215,7 @@ class TokenClassifier(L.LightningModule):
         if self.token_model_layers:
             token_model_embedding = self.token_model_layers(token_model_embedding)
             token_embedding_dim = self.transformer_encoder_hidden_dim
-        
+
         # Whether to apply dropout to the encoded sequence
         if self.classifier_dropout:
             token_model_embedding = self.classifier_dropout(token_model_embedding)
@@ -225,8 +223,7 @@ class TokenClassifier(L.LightningModule):
         largest_word_id = torch.max(word_ids)
         # NOTE DIFFERENCE: float of BATCH, UNIQUE_WORD_IDS, token_embedding_dim
         batch_average_word_vectors = torch.zeros(
-            (BATCH_SIZE, largest_word_id + 1, token_embedding_dim),
-            device=self.device
+            (BATCH_SIZE, largest_word_id + 1, token_embedding_dim), device=self.device
         )
         for word_id in torch.arange(0, largest_word_id + 1):
             # Bool of BATCH, SEQUENCE
@@ -238,10 +235,10 @@ class TokenClassifier(L.LightningModule):
             word_vectors = torch.mul(token_model_embedding, broadcast_word_id_mask).sum(
                 -2
             )
-            # Long of (Batch, 1), e.g. [[1.0], [2.0], [1.0], [3.0], [0.0]] which 
+            # Long of (Batch, 1), e.g. [[1.0], [2.0], [1.0], [3.0], [0.0]] which
             # represent the number of tokens that make up the given word.
             number_token_vectors = word_id_mask.sum(-1).to(word_vectors).unsqueeze(-1)
-            # Stops dividing by zero which causes nan values 
+            # Stops dividing by zero which causes nan values
             tiny_value_to_stop_nan = tiny_value_of_dtype(number_token_vectors.dtype)
             number_token_vectors = number_token_vectors + tiny_value_to_stop_nan
             # Average them as the sum could contain more than 1 token embedding
@@ -253,53 +250,57 @@ class TokenClassifier(L.LightningModule):
         # Note that some values will be `nan` as the word_ids are likely to have
         # ids to ignore which are values associated with -100.
         return output_vectors
-    
+
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=1e-3, weight_decay=0.01)
         return optimizer
-    
-    def _forward_with_loss_and_metric(self,
-                                      batch: dict[str, torch.Tensor],
-                                      split: str,
-                                      batch_idx: int
-                                      ) -> dict[str, torch.Tensor]:
+
+    def _forward_with_loss_and_metric(
+        self, batch: dict[str, torch.Tensor], split: str, batch_idx: int
+    ) -> dict[str, torch.Tensor]:
         # Float (BATCH, SEQUENCE, NUMBER CLASSES)
-        logits = self(batch['input_ids'], batch['attention_mask'], batch['word_ids'])
-        labels = batch['labels']
+        logits = self(batch["input_ids"], batch["attention_mask"], batch["word_ids"])
+        labels = batch["labels"]
         labels_mask = (labels != -100).to(logits)
 
         # Float (BATCH * SEQUENCE, NUMBER CLASSES)
         loss_logits = logits.view(-1, self.number_classes)
         # Long (BATCH * SEQUENCE)
         loss_labels = labels.view(-1)
-        
+
         loss = self.loss_fn(loss_logits, loss_labels)
 
         number_words = labels_mask.sum()
-        
+
         # torch metrics does not work with logits when using ignore index
         # Float (BATCH * SEQUENCE)
         pred_classes = torch.argmax(loss_logits, dim=-1)
         for metric_name in self.metric_names:
-            metric = getattr(self, f'{split}_{metric_name}')
+            metric = getattr(self, f"{split}_{metric_name}")
             metric(pred_classes, loss_labels)
-            self.log(f'{split}_{metric_name}', metric, on_epoch=True, on_step=True, prog_bar=True) 
+            self.log(
+                f"{split}_{metric_name}",
+                metric,
+                on_epoch=True,
+                on_step=True,
+                prog_bar=True,
+            )
 
-        self.log(f'{split}_loss', loss, batch_size=number_words, on_epoch=True, on_step=True, prog_bar=True)
+        self.log(
+            f"{split}_loss",
+            loss,
+            batch_size=number_words,
+            on_epoch=True,
+            on_step=True,
+            prog_bar=True,
+        )
         return {"loss": loss}
 
-    def training_step(self,
-                      batch: dict[str, torch.Tensor],
-                      batch_idx: int):
+    def training_step(self, batch: dict[str, torch.Tensor], batch_idx: int):
         return self._forward_with_loss_and_metric(batch, "train", batch_idx)
-        
-    
-    def validation_step(self,
-                  batch: dict[str, torch.Tensor],
-                  batch_idx: int):
+
+    def validation_step(self, batch: dict[str, torch.Tensor], batch_idx: int):
         return self._forward_with_loss_and_metric(batch, "validation", batch_idx)
-    
-    def test_step(self,
-                  batch: dict[str, torch.Tensor],
-                  batch_idx: int):
+
+    def test_step(self, batch: dict[str, torch.Tensor], batch_idx: int):
         return self._forward_with_loss_and_metric(batch, "test", batch_idx)

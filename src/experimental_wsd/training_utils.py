@@ -206,12 +206,12 @@ def collate_token_classification_dataset(
         torch tensor is the same, B x M whereby B is the batch size and M is the
         number of tokens including padding tokens.
 
-        NOTE: That the returned torch.Tensors can be of different M lengths as 
-        we use the maximum length of each dictionary key as it's maximum padding 
-        length. This is most likely to occur for the key `labels` if the function 
-        `data_processing_utils.tokenize_pre_processing` has the argument 
-        `align_labels_with_tokens=False`, this is perfectly ok just something 
-        to be aware of. It is very useful for word level (not sub-word token) 
+        NOTE: That the returned torch.Tensors can be of different M lengths as
+        we use the maximum length of each dictionary key as it's maximum padding
+        length. This is most likely to occur for the key `labels` if the function
+        `data_processing_utils.tokenize_pre_processing` has the argument
+        `align_labels_with_tokens=False`, this is perfectly ok just something
+        to be aware of. It is very useful for word level (not sub-word token)
         classification models.
 
         Args:
