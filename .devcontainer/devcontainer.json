@@ -2,7 +2,7 @@
 // README at: https://github.com/devcontainers/templates/tree/main/src/python
 {
 	"name": "GPU",
-	"remoteUser": "gpu",
+	"remoteUser": "ubuntu",
 	"updateRemoteUserUID": true,
 	// Or use a Dockerfile or Docker Compose file. More info: https://containers.dev/guide/dockerfile
 	"build": {
@@ -24,8 +24,5 @@
 					   "tamasfe.even-better-toml"]
 		}
   	},
-	"postStartCommand": ["uv", "sync", "&&", "uv", "run", "python -m wn download omw-en:1.4"],
-	"features": {
-    	"ghcr.io/devcontainers/features/sshd:1": {}
-	}
+	"postStartCommand": "uv sync && uv run python -m wn download omw-en:1.4"
 }
