@@ -62,6 +62,7 @@ UNI_DEP_TO_WORDNET_POS_TAGS = {
 
 # Should match `NOUN` to UniversalDepPOSTags.PROPN as
 # the SemCor `NOUN` includes proper nouns.
+# NOTE I think this is only for the WSL dataset and not SEMCOR
 SEMCOR_TO_UNI_DEP_POS_TAGS = {
     ".": UniversalDepPOSTags.PUNCT,
     "ADJ": UniversalDepPOSTags.ADJ,
@@ -75,4 +76,11 @@ SEMCOR_TO_UNI_DEP_POS_TAGS = {
     "PRT": UniversalDepPOSTags.PART,
     "VERB": UniversalDepPOSTags.VERB,
     "X": UniversalDepPOSTags.X,
+}
+
+SEMCOR_TO_WORDNET = {
+    "noun": WordNetPOSTags.n.value,
+    "verb": WordNetPOSTags.v.value,
+    "adj": WordNetPOSTags.a.value,
+    "adv": WordNetPOSTags.r.value,
 }

@@ -53,31 +53,31 @@ def get_random_sense_id(
     word_net_lexicon: wn.Wordnet, senses_to_ignore: set[str] | None = None
 ) -> str:
     """
-    Given a WordNet lexicon it returns a random sense ID, e.g. "omw-en-02604760-v".
+    Given a WordNet lexicon it returns a random sense ID, e.g. "omw-en--apos-hood-08641944-n".
 
     Args:
-        word_net_lexicon (wn.Wordnet): A Wordnet lexicon to get Synset data from.
+        word_net_lexicon (wn.Wordnet): A Wordnet lexicon to get Sense data from.
         senses_to_ignore: (set[str] | None = None): Sense ids that should not
             be returned, if None then no filtering is applied. Default None.
     Returns:
-        str: Returns a random sense ID, e.g. "omw-en-02604760-v"
+        str: Returns a random sense ID, e.g. "omw-en--apos-hood-08641944-n"
 
     Raises:
-        ValueError: If the Wordnet lexicon contains no Synsets.
+        ValueError: If the Wordnet lexicon contains no Senses.
         ValueError: If the senses to ignore contains all of the senses that
             are in the given Wordnet lexicon.
-        ValueError: If the synsets to ignore contains all of the synsets that are
+        ValueError: If the senses to ignore contains all of the senses that are
             in the given Wordnet lexicon.
     """
-    all_word_net_synsets = word_net_lexicon.synsets()
-    if len(all_word_net_synsets) == 0:
+    all_word_net_senses = word_net_lexicon.senses()
+    if len(all_word_net_senses) == 0:
         raise ValueError(
-            f"The WordNet lexicon: {word_net_lexicon.describe()} contains no Synsets."
+            f"The WordNet lexicon: {word_net_lexicon.describe()} contains no Senses."
         )
     all_word_net_sense_ids: list[str] = []
     sense_ids_to_choose_from: set[str] = set()
-    for synset in all_word_net_synsets:
-        sense_id = synset.id
+    for sense in all_word_net_senses:
+        sense_id = sense.id
         all_word_net_sense_ids.append(sense_id)
         if senses_to_ignore is not None:
             if sense_id in senses_to_ignore:
@@ -97,46 +97,40 @@ def get_random_sense_id(
     return random_sense_id
 
 
-def get_random_synset(
-    word_net_lexicon: wn.Wordnet, synsets_to_ignore: set[wn.Synset] | None = None
-) -> wn.Synset:
+def get_random_sense(
+    word_net_lexicon: wn.Wordnet, senses_to_ignore: set[wn.Sense] | None = None
+) -> wn.Sense:
     """
-    Given a WordNet lexicon it returns a random synset.
+    Given a WordNet lexicon it returns a random Wordnet Sense.
 
-    NOTE: a synset can become a sense ID by accessing it's attribute `id`, e.g.
-    `a_synset.id`
+    This is the same as `get_random_sense_id` but instead of using the ID of the
+    `wn.Sense` we are using the `wn.Sense` objects themselves.
+
+    NOTE: a Sense can become a sense ID by accessing it's attribute `id`, e.g.
+    `word_net_lexicon.sense("omw-en--apos-hood-08641944-n").id`
 
     Args:
-        word_net_lexicon (wn.Wordnet): A Wordnet lexicon to get Synset data from.
-        synsets_to_ignore (set[wn.Synset] | None): Synsets that should not be
+        word_net_lexicon (wn.Wordnet): A Wordnet lexicon to get Sense data from.
+        senses_to_ignore (set[wn.Sense] | None): Senses that should not be
             returned. If None then no filtering will happen. Default None.
     Returns:
-        wn.Synset: Returns a random synset.
+        wn.Sense: Returns a random Sense.
 
     Raises:
-        ValueError: If the Wordnet lexicon contains no Synsets.
-        ValueError: If the synsets to ignore contains all of the synsets that are
+        ValueError: If the Wordnet lexicon contains no Senses.
+        ValueError: If the senses to ignore contains all of the senses that are
             in the given Wordnet lexicon.
     """
-    all_word_net_synsets = word_net_lexicon.synsets()
-    if len(all_word_net_synsets) == 0:
-        raise ValueError(
-            f"The WordNet lexicon: {word_net_lexicon.describe()} contains no Synsets."
-        )
+    senses_ids_to_ignore: set[str] | None = None
+    if senses_to_ignore is not None:
+        senses_ids_to_ignore = set()
+        for sense_to_ignore in senses_to_ignore:
+            senses_ids_to_ignore.add(sense_to_ignore.id)
 
-    if synsets_to_ignore is not None:
-        all_word_net_synset_set = set(all_word_net_synsets)
-        synsets_to_choose_from = all_word_net_synset_set.difference(synsets_to_ignore)
-        if len(synsets_to_choose_from) == 0:
-            raise ValueError(
-                "The synsets to ignore has removed all of the possible "
-                "synsets to choose from, given the following lexicon: "
-                f"{word_net_lexicon.describe()}"
-            )
-        all_word_net_synsets = list(synsets_to_choose_from)
-
-    random_synset = random.choice(all_word_net_synsets)
-    return random_synset
+    random_sense_id = get_random_sense_id(
+        word_net_lexicon, senses_to_ignore=senses_ids_to_ignore
+    )
+    return word_net_lexicon.sense(random_sense_id)
 
 
 def get_all_senses(
@@ -166,25 +160,21 @@ def get_all_senses(
             in the given WordNet in most likely sense order. Example list:
             ["omw-en-02604760-v", "omw-en-02616386-v"]
     """
-    senses: list[str] = []
-    senses_set: set[str] = set()
+    tmp_senses = word_net_lexicon.senses(lemma, pos_tag)
 
     if senses_to_ignore is None:
         senses_to_ignore = set()
-
-    word_net_words = word_net_lexicon.words(lemma, pos_tag)
-
-    for word in word_net_words:
-        for word_synset in word.synsets():
-            sense_id = word_synset.id
-            if sense_id in senses_set:
-                continue
-            if sense_id in senses_to_ignore:
-                continue
-
-            senses_set.add(sense_id)
-            senses.append(sense_id)
-
+    # Used to remove duplicates
+    tmp_sense_set = set()
+    senses: list[str] = []
+    for sense in tmp_senses:
+        sense_id = sense.id
+        if sense_id in tmp_sense_set:
+            continue
+        if sense_id in senses_to_ignore:
+            continue
+        senses.append(sense_id)
+        tmp_sense_set.add(sense_id)
     return senses
 
 
@@ -196,28 +186,18 @@ def get_negative_wordnet_sense_ids(
     get_random_sense: bool = False,
 ) -> list[str]:
     """
-    Given a data sample containing at least the following key-values:
-    * `sense_id_key` (str | list[str]) - The positive word net sense ID for the sample.
-        This can be either a single string or a list of strings.
-    * `lemma_key` (str) - The lemma of the sample
-    * `pos_tag_key` (str | None) - The POS tag of the sample which can be None.
-
-    It will return all of the negative Wordnet sense ids for this sample based on
-    all of the senses that are associated to the (lemma, POS tag) which are not
+    Given a lemma, optional POS tag, and positive sense ID, it will return all
+    of the negative Wordnet sense ids for this sample based on all of the
+    senses that are associated to the (lemma, POS tag) which are not
     the positive word net sense ID.
 
     Args:
-        sample (dict[str, str | None]): The sample to get word net sense ids
-            for.
-        sense_id_key (str): The key in the sample that is associated to the
-            positive/correct sense ID. The positive/correct sense ID can be
-            a single string or a list of strings.
+        lemma (str): The lemma of the text
+        pos_tag (str | None): The POS tag of the text, can be None if not known.
+        sense_id (str): The positive Wordnet sense id which should not be part
+            of the sense ids returned as negatives.
         word_net_lexicon (wn.Wordnet): Wordnet lexicon to find the senses
             of the given lemma and POS tag.
-        lemma_key (str): The key in the sample that is associated to the
-            lemma. Default is "lemma".
-        pos_tag_key (str): The key in the sample that is associated to the
-            POS tag value. Default is "pos_tag".
         get_random_sense (bool): If True for non-ambiguous lemma and pos tags
             a random sense ID is created as negative sense ID, else when False
             no negative sense ID will be given for that sample, e.g. returns an
@@ -248,7 +228,16 @@ def get_negative_wordnet_sense_ids(
 
 def get_normalised_wordnet_mwe(mwe: str) -> str:
     """
+    Given a Multi Word Expression (MWE) that is likely to have come from the
+    SemCor dataset it will normalise it so that it can be found within Wordnet.
+
+    In essence this function replaces all `_` with a whitespace token.
+
+    Args:
+        mwe (str): The Multi Word Expression (MWE) to be normalised.
+    Returns:
+        str: The normalised MWE.
     """
-    if not "_" in mwe:
+    if "_" not in mwe:
         return mwe
-    return " ".join(mwe.split("_")) 
+    return mwe.replace("_", " ")
