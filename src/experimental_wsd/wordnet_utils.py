@@ -189,11 +189,10 @@ def get_all_senses(
 
 
 def get_negative_wordnet_sense_ids(
-    sample: dict[str, str | None],
-    sense_id_key: str,
+    lemma: str,
+    pos_tag: str | None,
+    sense_id: str,
     word_net_lexicon: wn.Wordnet,
-    lemma_key: str = "lemma",
-    pos_tag_key: str = "pos_tag",
     get_random_sense: bool = False,
 ) -> list[str]:
     """
@@ -228,17 +227,9 @@ def get_negative_wordnet_sense_ids(
             first sense ID should be the most likely for the given (lemma, POS tag).
     """
 
-    positive_sense_id = sample[sense_id_key]
+    positive_sense_id = sense_id
 
-    if not isinstance(positive_sense_id, list):
-        positive_sense_id = [positive_sense_id]
-
-    negative_sense_ids_to_ignore = set(positive_sense_id)
-    lemma = sample[lemma_key]
-    pos_tag = sample[pos_tag_key]
-    import pdb
-
-    pdb.set_trace()
+    negative_sense_ids_to_ignore = set([positive_sense_id])
     negative_sense_ids = get_all_senses(
         word_net_lexicon, lemma, pos_tag, senses_to_ignore=negative_sense_ids_to_ignore
     )
@@ -253,3 +244,11 @@ def get_negative_wordnet_sense_ids(
         return [random_sense_id]
 
     return negative_sense_ids
+
+
+def get_normalised_wordnet_mwe(mwe: str) -> str:
+    """
+    """
+    if not "_" in mwe:
+        return mwe
+    return " ".join(mwe.split("_")) 
