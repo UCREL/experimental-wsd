@@ -1,7 +1,8 @@
 from collections import Counter
-from typing import Any
+from typing import Any, Callable
 
 import transformers
+import wn
 
 
 def get_align_labels_with_tokens(
@@ -198,6 +199,7 @@ def map_token_text_and_is_content_labels(
 
 def map_token_sense_labels(
     wsl_instance: dict[str, Any],
+    word_net_sense_getter: Callable[[str], wn.Sense | None] | None = None,
 ) -> dict[str, list[str] | list[str | None] | list[tuple[int, int]]]:
     """
     Given a sample that comes from a `wsl.WSLSentence` it will return a dictionary
@@ -213,6 +215,9 @@ def map_token_sense_labels(
     `labels`: A list of WordNet sense keys that represent a gold label for the
         given annotation, e.g. `[`carrousel%1:06:01::`]`. One for each annotation.
         list[str]
+    `sense_labels`: A list of WordNet sense IDs that represent the Sense ID of
+        the labels, e.g. [`omw-en-carrousel-02966372-n`]. list[str]. This key
+        will not exist if `word_net_sense_getter` is None.
 
     A HuggingFace Datasets mapper function which be ran in non-batch mode.
 
@@ -227,18 +232,31 @@ def map_token_sense_labels(
             (list[int] each representing a token index that it relates too),
             and `labels` (list[str] the WordNet sense key [`carrousel%1:06:01::`])
             keys which represents the annotation data from the sample.
+        word_net_sense_getter (Callable[str, [wn.Sense | None]]): A callable
+            that takes as input a sense key, e.g. `carrousel%1:06:01::`
+            and returns a WordNet Sense if it can be found else None. NOTE that
+            sense keys are specific to English WordNets I believe and they are not
+            the same as Sense IDs like `omw-en-carrousel-02966372-n`. The best way
+            to get this callable is through the function:
+            `wn.compat.sensekey.sense_getter` see for more details:
+            `https://wn.readthedocs.io/en/latest/api/wn.compat.sensekey.html`.
+            If None then the `sense_labels` will not be in the returned dictionary.
+            Default None.
     Returns:
         dict[str, list[str] | list[str | None] | list[tuple[int, int]]]: A
             dictionary of five keys; `text`, `lemmas`, `pos_tags`, `token_offsets`,
-            and `labels`. NOTE that the length of the `text` will be different to
-            the length of the other list values however all other list values should
-            be the same length as they represent the annotations from the sample.
+            `sense_labels`, and `labels`. NOTE that the length of the `text`
+            will be different to the length of the other list values however
+            all other list values should be the same length as they represent
+            the annotations from the sample.
     """
     token_text: list[str] = []
     lemmas: list[str] = []
     pos_tags: list[str] = []
     token_start_end_offsets: list[tuple[int, int]] = []
     labels: list[str] = []
+    sense_labels: list[str] = []
+
     for token in wsl_instance["tokens"]:
         token_text.append(token["raw"])
     for annotation in wsl_instance["annotations"]:
@@ -255,10 +273,23 @@ def map_token_sense_labels(
             labels.append(label)
             lemmas.append(annotation["lemma"])
             pos_tags.append(annotation["pos"])
-    return {
+
+            if word_net_sense_getter is not None:
+                label_sense = word_net_sense_getter(label)
+                if label_sense is None:
+                    raise ValueError(
+                        "The sense cannot be found for this label "
+                        f"{label} which should not be the case."
+                    )
+                sense_labels.append(label_sense.id)
+    data = {
         "text": token_text,
         "lemmas": lemmas,
         "pos_tags": pos_tags,
         "token_offsets": token_start_end_offsets,
         "labels": labels,
     }
+    if word_net_sense_getter is not None:
+        data["sense_labels"] = sense_labels
+
+    return data

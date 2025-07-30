@@ -1,5 +1,9 @@
+from typing import Callable
+
 import pytest
+import wn
 from transformers import AutoTokenizer
+from wn.compat import sensekey
 
 from experimental_wsd.data_processing_utils import (
     get_align_labels_with_tokens,
@@ -7,6 +11,10 @@ from experimental_wsd.data_processing_utils import (
     map_token_text_and_is_content_labels,
     tokenize_pre_processing,
 )
+
+EN_LEXICON = "omw-en:1.4"
+ENGLISH_WN = wn.Wordnet(lexicon=EN_LEXICON, expand="")
+GET_SENSE = sensekey.sense_getter(EN_LEXICON, ENGLISH_WN)
 
 
 @pytest.mark.parametrize("label_pad_id", [-100, 50])
@@ -59,7 +67,10 @@ def test_tokenize_pre_processing(align_labels_with_tokens: bool, label_pad_id: i
     )
 
 
-def test_map_token_sense_labels():
+@pytest.mark.parametrize("word_net_sense_getter", [None, GET_SENSE])
+def test_map_token_sense_labels(
+    word_net_sense_getter: Callable[[str], wn.Sense | None] | None,
+):
     test_data = {
         "tokens": [
             {"raw": "This", "is_content_word": False},
@@ -70,13 +81,13 @@ def test_map_token_sense_labels():
         "annotations": [
             {
                 "lemma": "be",
-                "pos": "VERB",
+                "pos": "n",
                 "token_off": [1],
-                "labels": ["omw-en-02604760-v", "omw-en-02616386-v"],
+                "labels": ["become%2:42:01::", "improved%3:00:00::"],
             },
             {
                 "lemma": "a_test",
-                "pos": "n",
+                "pos": "v",
                 "token_off": [2, 3],
                 "labels": ["review%2:31:00::"],
             },
@@ -91,13 +102,24 @@ def test_map_token_sense_labels():
     expected_output = {
         "text": ["This", "is", "a", "test"],
         "lemmas": ["be", "be", "a_test", "this_is_a"],
-        "pos_tags": ["VERB", "VERB", "n", None],
+        "pos_tags": ["n", "n", "v", None],
         "token_offsets": [(1, 2), (1, 2), (2, 4), (0, 3)],
         "labels": [
-            "omw-en-02604760-v",
-            "omw-en-02616386-v",
+            "become%2:42:01::",
+            "improved%3:00:00::",
             "review%2:31:00::",
             "review%2:31:00::",
         ],
+        "sense_labels": [
+            "omw-en-become-02626604-v",
+            "omw-en-improved-01288396-a",
+            "omw-en-review-00696189-v",
+            "omw-en-review-00696189-v",
+        ],
     }
-    assert expected_output == map_token_sense_labels(test_data)
+    if word_net_sense_getter is None:
+        del expected_output["sense_labels"]
+
+    assert expected_output == map_token_sense_labels(
+        test_data, word_net_sense_getter=word_net_sense_getter
+    )
