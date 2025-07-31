@@ -6,6 +6,7 @@ from transformers import AutoTokenizer
 from wn.compat import sensekey
 
 from experimental_wsd.data_processing_utils import (
+    filter_empty_values,
     get_align_labels_with_tokens,
     map_negative_sense_ids,
     map_token_sense_labels,
@@ -227,3 +228,8 @@ def test_map_negative_sense_ids(
             assert test_data[sense_id_key][3] not in output_random_negative_sense_ids
         else:
             assert expected_negative_sense_ids[3] == output_negative_sense_ids[3]
+
+
+def test_filter_empty_values():
+    assert not filter_empty_values({"key": []}, "key")
+    assert filter_empty_values({"key": ["yes", "no"]}, "key")

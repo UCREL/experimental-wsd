@@ -400,3 +400,22 @@ def map_negative_sense_ids(
         all_negative_sense_ids.append(negative_sense_ids)
 
     return {negative_sense_id_key: all_negative_sense_ids}
+
+
+def filter_empty_values(data: dict[str, list[Any]], key: str) -> bool:
+    """
+    Returns the value in the data for the given key when evaluated, in essence
+    determines if the value for the key in the data is empty or not.
+
+    HuggingFace dataset filter.
+
+    Args:
+        data (dict[str, list[Any]]): The data to be filtered.
+        key (str): The key for the value in the data that will be evaluated on
+            whether it is empty or not.
+    Returns:
+        bool: True if the value for the key in the data is empty or not.
+    """
+    if data[key]:
+        return True
+    return False
