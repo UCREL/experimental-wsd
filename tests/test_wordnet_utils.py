@@ -6,6 +6,7 @@ import wn
 from experimental_wsd.wordnet_utils import (
     check_lexicon_exists,
     get_all_senses,
+    get_definition,
     get_negative_wordnet_sense_ids,
     get_normalised_mwe_lemma_for_wordnet,
     get_random_sense,
@@ -16,9 +17,28 @@ EN_LEXICON = "omw-en:1.4"
 ENGLISH_WN = wn.Wordnet(lexicon=EN_LEXICON, expand="")
 
 
+class FakeSynset:
+    def __init__(self):
+        pass
+
+    def definition(self) -> str:
+        return ""
+
+
+class FakeSense:
+    def __init__(self):
+        pass
+
+    def synset(self) -> FakeSynset:
+        return FakeSynset()
+
+
 class FakeLexicon:
     def __init__(self):
         pass
+
+    def sense(self, sense_id: str) -> FakeSense:
+        return FakeSense()
 
     def senses(self) -> list[str]:
         return []
@@ -188,3 +208,16 @@ def test_get_normalised_mwe_lemma_for_wordnet():
     assert "stonefruit" == get_normalised_mwe_lemma_for_wordnet("stonefruit")
     assert "stone" == get_normalised_mwe_lemma_for_wordnet("stone")
     assert "" == get_normalised_mwe_lemma_for_wordnet("")
+
+
+def test_get_definition():
+    new_york_sense_id = "omw-en-New_York-09119277-n"
+    expected_definition = (
+        "the largest city in New York State and in the United States; "
+        "located in southeastern New York at the mouth of the Hudson river; "
+        "a major financial and cultural center"
+    )
+    assert expected_definition == get_definition(new_york_sense_id, ENGLISH_WN)
+
+    with pytest.raises(ValueError):
+        get_definition(new_york_sense_id, FakeLexicon())

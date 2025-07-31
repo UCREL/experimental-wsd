@@ -246,3 +246,27 @@ def get_normalised_mwe_lemma_for_wordnet(mwe_lemma: str) -> str:
     if "_" not in mwe_lemma:
         return mwe_lemma
     return mwe_lemma.replace("_", " ")
+
+
+def get_definition(sense_id: str, word_net_lexicon: wn.Wordnet) -> str:
+    """
+    Given a Wordnet sense id it returns the definition of that sense.
+
+    Args:
+        sense_id (str): A sense ID, e.g. `omw-en-New_York-09119277-n`
+        word_net_lexicon (wn.Wordnet): The sense inventory to use to get the
+            definition of the given sense ID.
+    Returns:
+        str: The definition of that sense ID.
+    Raises:
+        ValueError: If the definition found is either None or an empty string.
+        Error: If the sense ID cannot be found in the given word net lexicon.
+    """
+
+    sense_definition = word_net_lexicon.sense(sense_id).synset().definition()
+    if not sense_definition:
+        raise ValueError(
+            f"No sense definition found for sense ID {sense_id} "
+            f"with the following word net lexicon: {word_net_lexicon.describe()}"
+        )
+    return sense_definition
