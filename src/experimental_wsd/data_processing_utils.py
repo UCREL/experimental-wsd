@@ -419,3 +419,50 @@ def filter_empty_values(data: dict[str, list[Any]], key: str) -> bool:
     if data[key]:
         return True
     return False
+
+
+def tokenize_key(
+    batched_data: dict[str, list[str]],
+    tokenizer: transformers.PreTrainedTokenizerFast,
+    text_key: str,
+    output_key_prefix: str = "",
+) -> dict[str, list[list[int]]]:
+    """
+    Given a batch of data with the following key, values;
+    * `text_key` (list[str]): The batch of texts to be tokenized
+    It will tokenize the text with the given tokenizer and return the following
+    key, values;
+    * `{output_key_prefix}_input_ids` (list[list[int]]): For each text a list
+        integers representing the token indexes.
+    * `{output_key_prefix}_attention_mask` (list[list[int]]): For each text
+        a list of 1 or 0s representing the attention mask for each token.
+        In practice it is a list of 1s as no padding is performed.
+
+    If `output_key_prefix` is empty then they keys will be `input_ids` and
+    `attention_mask`.
+
+    A HuggingFace Datasets mapper function which should be ran in batch mode.
+
+    Args:
+        batched_data (dict[str, list[str]]): Batched data containing the
+            text to be tokenized.
+        tokenizer (transformers.PreTrainedTokenizerFast): The tokenizer to
+            tokenize the text with.
+        text_key (str): The key in the `batched_data` that represents the
+            text to be tokenized.
+        output_key_prefix (str): If not an empty string, "", then it will prefix
+            the output keys like so `{output_key_prefix}_`. Default an
+            empty string ("").
+    Returns:
+        dict[str, list[list[int]]]: The tokenized text represented as by
+            `input_ids` and `attention_mask`.
+    """
+    tokenized_key = tokenizer(
+        batched_data[text_key], truncation=True, is_split_into_words=False
+    )
+    if output_key_prefix:
+        tmp_tokenized_key = {}
+        for key, value in tokenized_key.items():
+            tmp_tokenized_key[f"{output_key_prefix}_{key}"] = value
+        tokenized_key = tmp_tokenized_key
+    return tokenized_key

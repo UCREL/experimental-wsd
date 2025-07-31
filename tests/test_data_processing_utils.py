@@ -11,12 +11,16 @@ from experimental_wsd.data_processing_utils import (
     map_negative_sense_ids,
     map_token_sense_labels,
     map_token_text_and_is_content_labels,
+    tokenize_key,
     tokenize_pre_processing,
 )
 
 EN_LEXICON = "omw-en:1.4"
 ENGLISH_WN = wn.Wordnet(lexicon=EN_LEXICON, expand="")
 GET_SENSE = sensekey.sense_getter(EN_LEXICON, ENGLISH_WN)
+TOKENIZER = AutoTokenizer.from_pretrained(
+    "FacebookAI/roberta-base", add_prefix_space=True
+)
 
 
 @pytest.mark.parametrize("label_pad_id", [-100, 50])
@@ -61,11 +65,9 @@ def test_tokenize_pre_processing(align_labels_with_tokens: bool, label_pad_id: i
     }
     if not align_labels_with_tokens:
         expected_output["labels"] = [[0, 0, 0, 1]]
-    tokenizer = AutoTokenizer.from_pretrained(
-        "FacebookAI/roberta-base", add_prefix_space=True
-    )
+
     assert expected_output == tokenize_pre_processing(
-        test_data, tokenizer, label_pad_id, align_labels_with_tokens
+        test_data, TOKENIZER, label_pad_id, align_labels_with_tokens
     )
 
 
@@ -233,3 +235,22 @@ def test_map_negative_sense_ids(
 def test_filter_empty_values():
     assert not filter_empty_values({"key": []}, "key")
     assert filter_empty_values({"key": ["yes", "no"]}, "key")
+
+
+@pytest.mark.parametrize("output_key_prefix", [""])
+def test_tokenize_key(output_key_prefix: str):
+    text_key = "gloss"
+    test_data = {text_key: ["Hello how are you", "I am ok", ""]}
+
+    expected_output = {
+        "input_ids": [[0, 20920, 141, 32, 47, 2], [0, 38, 524, 15983, 2], [0, 2]],
+        "attention_mask": [[1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1]],
+    }
+    if output_key_prefix:
+        tmp_expected_output = {}
+        for key, value in expected_output:
+            tmp_expected_output[f"{output_key_prefix}_{key}"] = value
+        expected_output = tmp_expected_output
+    assert expected_output == tokenize_key(
+        test_data, TOKENIZER, text_key, output_key_prefix
+    )
