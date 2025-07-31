@@ -155,10 +155,11 @@ def get_all_senses(
         pos_tag (str | None): The POS tag of the text, can be None if not known.
         senses_to_ignore (set[str] | None): Sense ids that should not be returned
             in the list, if None then it will return all sense ids. Default None.
+            Example of a Sense ID `omw-en-carrousel-02966372-n`
     Returns:
         list[str]: All of the senses that are linked to this lemma and POS tag
             in the given WordNet in most likely sense order. Example list:
-            ["omw-en-02604760-v", "omw-en-02616386-v"]
+            ["omw-en-be-02445925-v", "omw-en-be-02697725-v"]
     """
     tmp_senses = word_net_lexicon.senses(lemma, pos_tag)
 
@@ -195,13 +196,16 @@ def get_negative_wordnet_sense_ids(
         lemma (str): The lemma of the text
         pos_tag (str | None): The POS tag of the text, can be None if not known.
         sense_id (str): The positive Wordnet sense id which should not be part
-            of the sense ids returned as negatives.
+            of the sense ids returned as negatives. Example would be
+            `omw-en-carrousel-02966372-n`
         word_net_lexicon (wn.Wordnet): Wordnet lexicon to find the senses
             of the given lemma and POS tag.
         get_random_sense (bool): If True for non-ambiguous lemma and pos tags
             a random sense ID is created as negative sense ID, else when False
             no negative sense ID will be given for that sample, e.g. returns an
-            empty list. Default False.
+            empty list. In essence if all Senses that are returned for the
+            given lemma and POS tag is the `sense_id` and this is True, then
+            a random sense ID is created as a negative sense ID. Default False.
     Returns:
         list[str]: The negative Wordnet sense IDs in Wordnet order, meaning the
             first sense ID should be the most likely for the given (lemma, POS tag).
@@ -226,18 +230,19 @@ def get_negative_wordnet_sense_ids(
     return negative_sense_ids
 
 
-def get_normalised_wordnet_mwe(mwe: str) -> str:
+def get_normalised_mwe_lemma_for_wordnet(mwe_lemma: str) -> str:
     """
-    Given a Multi Word Expression (MWE) that is likely to have come from the
-    SemCor dataset it will normalise it so that it can be found within Wordnet.
+    Given a Multi Word Expression (MWE) lemma that is likely to have come from the
+    SemCor dataset, lemma not token, it will normalise it so that it can be
+    found within Wordnet.
 
     In essence this function replaces all `_` with a whitespace token.
 
     Args:
-        mwe (str): The Multi Word Expression (MWE) to be normalised.
+        mwe_lemma (str): The Multi Word Expression (MWE) lemma to be normalised.
     Returns:
         str: The normalised MWE.
     """
-    if "_" not in mwe:
-        return mwe
-    return mwe.replace("_", " ")
+    if "_" not in mwe_lemma:
+        return mwe_lemma
+    return mwe_lemma.replace("_", " ")

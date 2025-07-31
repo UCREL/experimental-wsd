@@ -7,7 +7,7 @@ from experimental_wsd.wordnet_utils import (
     check_lexicon_exists,
     get_all_senses,
     get_negative_wordnet_sense_ids,
-    get_normalised_wordnet_mwe,
+    get_normalised_mwe_lemma_for_wordnet,
     get_random_sense,
     get_random_sense_id,
 )
@@ -182,9 +182,9 @@ def test_get_negative_wordnet_sense_ids(get_random_sense: bool):
         assert 0 == len(negative_sense_ids)
 
 
-def test_get_normalised_wordnet_mwe():
-    assert "stone fruit" == get_normalised_wordnet_mwe("stone_fruit")
-    assert "stone fruit" == get_normalised_wordnet_mwe("stone fruit")
-    assert "stonefruit" == get_normalised_wordnet_mwe("stonefruit")
-    assert "stone" == get_normalised_wordnet_mwe("stone")
-    assert "" == get_normalised_wordnet_mwe("")
+def test_get_normalised_mwe_lemma_for_wordnet():
+    assert "stone fruit" == get_normalised_mwe_lemma_for_wordnet("stone_fruit")
+    assert "stone fruit" == get_normalised_mwe_lemma_for_wordnet("stone fruit")
+    assert "stonefruit" == get_normalised_mwe_lemma_for_wordnet("stonefruit")
+    assert "stone" == get_normalised_mwe_lemma_for_wordnet("stone")
+    assert "" == get_normalised_mwe_lemma_for_wordnet("")

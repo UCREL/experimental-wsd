@@ -4,6 +4,11 @@ from typing import Any, Callable
 import transformers
 import wn
 
+from experimental_wsd.wordnet_utils import (
+    get_negative_wordnet_sense_ids,
+    get_normalised_mwe_lemma_for_wordnet,
+)
+
 
 def get_align_labels_with_tokens(
     labels: list[int], word_ids: list[int | None], label_pad_id: int = -100
@@ -219,6 +224,12 @@ def map_token_sense_labels(
         the labels, e.g. [`omw-en-carrousel-02966372-n`]. list[str]. This key
         will not exist if `word_net_sense_getter` is None.
 
+    NOTE: That compared to the original sample whereby each annotation can contain
+    more than one label, when this function is applied in essence these labels
+    are flattened therefore if an annotation contains more than one label then
+    all of it's attributes, lemma, POS tag, token offsets are duplicated for
+    each label.
+
     A HuggingFace Datasets mapper function which be ran in non-batch mode.
 
     Args:
@@ -293,3 +304,99 @@ def map_token_sense_labels(
         data["sense_labels"] = sense_labels
 
     return data
+
+
+def map_negative_sense_ids(
+    text_with_annotations: dict[str, list[str] | list[str | None]],
+    word_net_lexicon: wn.Wordnet,
+    sense_id_key: str,
+    lemma_key: str = "lemma",
+    pos_tag_key: str = "pos_tag",
+    negative_sense_id_key: str = "negative_labels",
+    get_random_sense: bool = False,
+    pos_tag_mapper: dict[str, str] | None = None,
+    normalise_mwe_lemma: bool = True,
+) -> dict[str, list[str]]:
+    """
+    Given a data sample containing at least the following key-values:
+    * `sense_id_key` (list[str]) - The list of positive word net sense ID for the sample.
+    * `lemma_key` (list[str]) - The list of lemmas.
+    * `pos_tag_key` (list[str | None]) - The list of POS tags, the list can
+        contain None values for unknown POS tag values.
+    All of the lists above should be the same length as each index value should
+    be associated with each other, e.g. lemma[0] should be the lemma of the
+    POS tag and positive word net sense ID at index 0.
+
+
+    It will return all of the negative Wordnet sense ids for this sample based on
+    all of the senses that are associated to the (lemma, POS tag) which are not
+    the positive word net sense ID.
+
+    Args:
+        text_with_annotations (dict[str, list[str] | list[str | None]): The
+            sample to get negative word net sense ids for.
+        word_net_lexicon (wn.Wordnet): Wordnet lexicon to find the senses
+            of the given lemma and POS tag.
+        sense_id_key (str): The key in the sample that is associated to the
+            positive/correct sense ID. The sense ID should be a Wordnet sense
+            ID, e.g. `omw-en-become-02626604-v`.
+        lemma_key (str): The key in the sample that is associated to the
+            lemma. Default is "lemma".
+        pos_tag_key (str): The key in the sample that is associated to the
+            POS tag value. Default is "pos_tag".
+        negative_sense_id_key (str): The key name to give to the newly generated
+            negative sense IDs. Default is "negative_labels".
+        get_random_sense (bool): If True for non-ambiguous lemma and pos tags
+            a random sense ID is created as negative sense ID, else when False
+            no negative sense ID will be given for that sample, e.g. returns an
+            empty list. In essence if all Senses that are returned for the
+            given lemma and POS tag is the positive sense and this is True, then
+            a random sense ID is created as a negative sense ID. Default False.
+        pos_tag_mapper (dict[str, str] | None): POS tagger mapper to use, if None then
+            the original POS tags will be used. This can be essential if there
+            is a mismatch in POS tagging schemes between the training data and the
+            sense inventory. Default is None.
+        normalise_mwe_lemma (bool): Whether to normalise the Multi Word Expressions (MWE)
+            of the lemma. In SemCor dataset the lemma for MWE are normally represented
+            with an `_` instead of spaces, but Wordnet represents MWEs with a
+            whitespace, e.g. `New York` in SemCor the lemma would be `new_york`
+            whereas in Wordnet it would be `new york`. Default is True.
+    Returns:
+        dict[str, list[str]]: A dictionary containing 1 key named `negative_sense_id_key`
+            with the following as it's value, negative Wordnet sense IDs in
+            Wordnet order, meaning the first sense ID should be the most
+            likely for the given (lemma, POS tag).
+    """
+
+    lemmas = text_with_annotations[lemma_key]
+    pos_tags = text_with_annotations[pos_tag_key]
+    positive_sense_ids = text_with_annotations[sense_id_key]
+
+    all_field_values = [lemmas, pos_tags, positive_sense_ids]
+    first_field_length = len(lemmas)
+    field_lengths = [
+        len(field_values) == first_field_length for field_values in all_field_values
+    ]
+    if not all(field_lengths):
+        raise ValueError(
+            "The lengths of the lists of the lemmas, POS tags, and "
+            "sense ids must be the same, but they are not for this "
+            f"sample: {text_with_annotations}"
+        )
+
+    all_negative_sense_ids = []
+    for lemma, pos_tag, positive_sense_id in zip(*all_field_values):
+        if normalise_mwe_lemma:
+            lemma = get_normalised_mwe_lemma_for_wordnet(lemma)
+        if pos_tag_mapper:
+            pos_tag = pos_tag_mapper[pos_tag]
+        negative_sense_ids = get_negative_wordnet_sense_ids(
+            lemma,
+            pos_tag,
+            positive_sense_id,
+            word_net_lexicon,
+            get_random_sense=get_random_sense,
+        )
+        all_negative_sense_ids.append(negative_sense_ids)
+
+    return {negative_sense_id_key: all_negative_sense_ids}
