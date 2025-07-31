@@ -5,6 +5,7 @@ import transformers
 import wn
 
 from experimental_wsd.wordnet_utils import (
+    get_definition,
     get_negative_wordnet_sense_ids,
     get_normalised_mwe_lemma_for_wordnet,
 )
@@ -421,6 +422,9 @@ def filter_empty_values(data: dict[str, list[Any]], key: str) -> bool:
     return False
 
 
+# Need to create a function that will remove token level entries if one is empty
+
+
 def tokenize_key(
     batched_data: dict[str, list[str]],
     tokenizer: transformers.PreTrainedTokenizerFast,
@@ -466,3 +470,46 @@ def tokenize_key(
             tmp_tokenized_key[f"{output_key_prefix}_{key}"] = value
         tokenized_key = tmp_tokenized_key
     return tokenized_key
+
+
+def map_to_definitions(
+    data: dict[str, list[str] | list[list[str]]],
+    sense_key: str,
+    word_net_lexicon: wn.Wordnet,
+    definition_key: str,
+) -> dict[str, list[str] | list[list[str]]]:
+    """
+    The data should contain a key, `sense_key`, that either contains a list of
+    sense IDs or a list of a list of sense IDs. This function will then return
+    the definitions of these sense IDs using the given word net lexicon. These
+    definitions are then returned as either a list of definitions or a list of
+    a list of definitions depending on how the sense IDs were formatted. These
+    sense definitions will be stored in the `definition_key` of the returned
+    dictionary.
+
+    Args:
+        data (dict[str, list[str] | list[list[str]]]): The sample that contains
+            sense IDs that will be converted 1-to-1 with the sense's definition.
+        sense_key (str): The key within data that contains the sense id values.
+        word_net_lexicon (wn.Wordnet): Wordnet lexicon used to get the definitions
+            of the given sense ids.
+        definition_key (str): The key within the returned dictionary that will
+            contain the sense definitions.
+    Returns:
+        dict[str, list[str] | list[list[str]]]: The sense definitions contained
+            within the key `definition_key`.
+    """
+    sense_definitions = {definition_key: []}
+
+    for sense_ids in data[sense_key]:
+        if isinstance(sense_ids, list):
+            definitions = []
+            for sense_id in sense_ids:
+                definitions.append(get_definition(sense_id, word_net_lexicon))
+            sense_definitions[definition_key].append(definitions)
+        else:
+            sense_id = sense_ids
+            definition = get_definition(sense_id, word_net_lexicon)
+            sense_definitions[definition_key].append(definition)
+
+    return sense_definitions

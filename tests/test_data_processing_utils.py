@@ -9,6 +9,7 @@ from experimental_wsd.data_processing_utils import (
     filter_empty_values,
     get_align_labels_with_tokens,
     map_negative_sense_ids,
+    map_to_definitions,
     map_token_sense_labels,
     map_token_text_and_is_content_labels,
     tokenize_key,
@@ -253,4 +254,44 @@ def test_tokenize_key(output_key_prefix: str):
         expected_output = tmp_expected_output
     assert expected_output == tokenize_key(
         test_data, TOKENIZER, text_key, output_key_prefix
+    )
+
+
+def test_map_to_definitions():
+    sense_key = "labels"
+    definition_key = "label_definitions"
+    test_data = {
+        sense_key: [
+            "omw-en-be-02702508-v",
+            "omw-en-New_York-09119277-n",
+            "omw-en-New_York-09118181-n",
+        ]
+    }
+    expected_output = {
+        definition_key: [
+            "be priced at",
+            "the largest city in New York State and in the United States; located in southeastern New York at the mouth of the Hudson river; a major financial and cultural center",
+            "one of the British colonies that formed the United States",
+        ]
+    }
+    assert expected_output == map_to_definitions(
+        test_data, sense_key, ENGLISH_WN, definition_key
+    )
+    test_data = {
+        sense_key: [
+            ["omw-en-be-02702508-v"],
+            ["omw-en-New_York-09119277-n", "omw-en-New_York-09118181-n"],
+        ]
+    }
+    expected_output = {
+        definition_key: [
+            ["be priced at"],
+            [
+                "the largest city in New York State and in the United States; located in southeastern New York at the mouth of the Hudson river; a major financial and cultural center",
+                "one of the British colonies that formed the United States",
+            ],
+        ]
+    }
+    assert expected_output == map_to_definitions(
+        test_data, sense_key, ENGLISH_WN, definition_key
     )
