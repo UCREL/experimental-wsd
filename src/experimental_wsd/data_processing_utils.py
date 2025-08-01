@@ -541,7 +541,8 @@ def tokenize_key(
                 tokenized_outputs[key].append(value)
         return dict(tokenized_outputs)
     else:
-        return _tokenize_text_list(batched_data[text_key])
+        tokenized_outputs = _tokenize_text_list(batched_data[text_key])
+        return tokenized_outputs
 
 
 def map_to_definitions(
