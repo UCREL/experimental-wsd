@@ -1,5 +1,5 @@
 from collections import Counter, defaultdict
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 
 import transformers
 import wn
@@ -468,13 +468,66 @@ def map_empty_removal_token_values(
 
 
 def token_word_id_mask(
-    data: dict[str, list[list[int | None]]],
+    data: dict[str, list[list[int] | int | None]],
     word_ids_key: str,
     token_offsets_key: str,
     word_id_mask_key: str,
-) -> dict[str, list[list[int]]]:
-    """ """
-    return {}
+) -> dict[str, list[list[Literal[0, 1]]]]:
+    """
+    Creates a token id mask for each token offset based off the word ids whereby
+    the token offsets represent word indexes and the word ids represent the
+    word id for a given sub token.
+
+    Example;
+    test_data = {
+        word_ids_key: [None, 0, 1, 1, 2, 2, 2, 3, None],
+        token_offsets_key: [[0,1], [0,3], [1,4]]
+    }
+
+    expected_output = {
+        word_id_mask_key: [
+            [0,1,0,0,0,0,0,0,0],
+            [0,1,1,1,1,1,1,0,0],
+            [0,0,1,1,1,1,1,1,0]
+        ]
+    }
+    Whereby we can see that the word 1 and 2 are represented by many sub word
+    tokens.
+
+    The word id mask created is useful within a neural network to easily
+    identify the sub word tokens that make up a token offset
+    (usually a whole word or a Multi Word Expression).
+
+    A HuggingFace Datasets mapper function which should be ran in non-batch mode.
+
+    Args:
+        data (dict[str, list[list[int | None]]]): A dictionary that contains
+            the `word_ids_key` and `token_offsets_key`.
+        word_ids_key (str): The key that contains word ids, a list of either
+            None or integer values.
+        token_offsets_key (str): The key that contains token offsets, a list
+            of lists whereby the inner list should contain two integers representing
+            the start and end word indexes of a word or multi word expression.
+            For example `[[0, 1]]` would represent the first word in the text.
+        word_id_mask_key (str): The key name of the returned token id mask.
+    Returns:
+        dict[str, list[list[Literal[0, 1]]]]: A dictionary with the key `word_id_mask_key`
+            which contains a list of token id masks for each given token offset.
+    """
+    word_id_mask = []
+    word_ids = data[word_ids_key]
+    for token_offset in data[token_offsets_key]:
+        start_offset, end_offset = token_offset
+        relevant_word_ids = set(range(start_offset, end_offset))
+        token_offset_word_id_mask = []
+        for word_id in word_ids:
+            if word_id in relevant_word_ids:
+                token_offset_word_id_mask.append(1)
+            else:
+                token_offset_word_id_mask.append(0)
+        word_id_mask.append(token_offset_word_id_mask)
+
+    return {word_id_mask_key: word_id_mask}
 
 
 def tokenize_key(
@@ -488,7 +541,7 @@ def tokenize_key(
 ) -> dict[str, list[list[int]] | list[list[list[int]]]]:
     """
     Given data with the following key, values;
-    * `text_key` (list[str] | list[list[str]]): The of texts to be tokenized.
+    * `text_key` (list[str] | list[list[str]]): The texts to be tokenized.
         It can be a list of a list of texts in this case this is represented
         in the output having an additional outer list.
     It will tokenize the text with the given tokenizer and return the following

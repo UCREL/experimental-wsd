@@ -13,6 +13,7 @@ from experimental_wsd.data_processing_utils import (
     map_to_definitions,
     map_token_sense_labels,
     map_token_text_and_is_content_labels,
+    token_word_id_mask,
     tokenize_key,
     tokenize_pre_processing,
 )
@@ -413,10 +414,31 @@ def test_map_to_definitions():
     )
 
 
-# def test_token_word_id_mask():
-#    word_ids_key = "word_ids"
-#    token_offsets_key = "token_offsets"
-#    word_id_mask_key = "word_ids_mask"
-#    test_data = {
-#
-#    }
+def test_token_word_id_mask():
+    word_ids_key = "word_ids"
+    token_offsets_key = "token_offsets"
+    word_id_mask_key = "word_ids_mask"
+    test_data = {
+        word_ids_key: [None, 0, 1, 1, 2, 2, 2, 3, None],
+        token_offsets_key: [[0, 1], [0, 3], [1, 4]],
+    }
+
+    expected_output = {
+        word_id_mask_key: [
+            [0, 1, 0, 0, 0, 0, 0, 0, 0],
+            [0, 1, 1, 1, 1, 1, 1, 0, 0],
+            [0, 0, 1, 1, 1, 1, 1, 1, 0],
+        ]
+    }
+
+    assert expected_output == token_word_id_mask(
+        test_data, word_ids_key, token_offsets_key, word_id_mask_key
+    )
+
+    test_data = {word_ids_key: [None, 0, 1, 1, 2, 2, 2, 3, None], token_offsets_key: []}
+
+    expected_output = {word_id_mask_key: []}
+
+    assert expected_output == token_word_id_mask(
+        test_data, word_ids_key, token_offsets_key, word_id_mask_key
+    )
