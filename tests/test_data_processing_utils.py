@@ -318,6 +318,60 @@ def test_tokenize_key(output_key_prefix: str, add_word_ids: bool):
         test_multiple_list_data, TOKENIZER, text_key, output_key_prefix, add_word_ids
     )
 
+    test_token_data = {
+        text_key: [["Hello", "how", "are", "you"], ["I", "am", "ok"], [""]]
+    }
+    expected_output = {
+        "input_ids": [[0, 20920, 141, 32, 47, 2], [0, 38, 524, 15983, 2], [0, 2]],
+        "attention_mask": [[1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1]],
+    }
+
+    if add_word_ids:
+        expected_output["word_ids"] = [
+            [None, 0, 1, 2, 3, None],
+            [None, 0, 1, 2, None],
+            [None, None],
+        ]
+
+    if output_key_prefix:
+        tmp_expected_output = {}
+        for key, value in expected_output.items():
+            tmp_expected_output[f"{output_key_prefix}_{key}"] = value
+        expected_output = tmp_expected_output
+
+    assert expected_output == tokenize_key(
+        test_token_data,
+        TOKENIZER,
+        text_key,
+        output_key_prefix=output_key_prefix,
+        is_split_into_words=True,
+        add_word_ids=add_word_ids,
+    )
+
+    test_token_data = {text_key: ["Hello", "how", "are", "you"]}
+    expected_output = {
+        "input_ids": [0, 20920, 141, 32, 47, 2],
+        "attention_mask": [1, 1, 1, 1, 1, 1],
+    }
+
+    if add_word_ids:
+        expected_output["word_ids"] = [None, 0, 1, 2, 3, None]
+
+    if output_key_prefix:
+        tmp_expected_output = {}
+        for key, value in expected_output.items():
+            tmp_expected_output[f"{output_key_prefix}_{key}"] = value
+        expected_output = tmp_expected_output
+
+    assert expected_output == tokenize_key(
+        test_token_data,
+        TOKENIZER,
+        text_key,
+        output_key_prefix=output_key_prefix,
+        is_split_into_words=True,
+        add_word_ids=add_word_ids,
+    )
+
 
 def test_map_to_definitions():
     sense_key = "labels"
@@ -357,3 +411,12 @@ def test_map_to_definitions():
     assert expected_output == map_to_definitions(
         test_data, sense_key, ENGLISH_WN, definition_key
     )
+
+
+# def test_token_word_id_mask():
+#    word_ids_key = "word_ids"
+#    token_offsets_key = "token_offsets"
+#    word_id_mask_key = "word_ids_mask"
+#    test_data = {
+#
+#    }

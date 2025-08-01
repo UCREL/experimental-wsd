@@ -467,7 +467,14 @@ def map_empty_removal_token_values(
     return new_key_values
 
 
-# def token_word_id_mask(batche)
+def token_word_id_mask(
+    data: dict[str, list[list[int | None]]],
+    word_ids_key: str,
+    token_offsets_key: str,
+    word_id_mask_key: str,
+) -> dict[str, list[list[int]]]:
+    """ """
+    return {}
 
 
 def tokenize_key(
@@ -476,11 +483,13 @@ def tokenize_key(
     text_key: str,
     output_key_prefix: str = "",
     add_word_ids: bool = True,
+    is_split_into_words: bool = False,
+    truncation: bool = False,
 ) -> dict[str, list[list[int]] | list[list[list[int]]]]:
     """
-    Given a batch of data with the following key, values;
-    * `text_key` (list[str] | list[list[str]]): The batch of texts to be tokenized.
-        It can be a batch of a batch of texts in this case this is represented
+    Given data with the following key, values;
+    * `text_key` (list[str] | list[list[str]]): The of texts to be tokenized.
+        It can be a list of a list of texts in this case this is represented
         in the output having an additional outer list.
     It will tokenize the text with the given tokenizer and return the following
     key, values;
@@ -497,7 +506,11 @@ def tokenize_key(
     If `output_key_prefix` is empty then they keys will be `input_ids` and
     `attention_mask`.
 
-    A HuggingFace Datasets mapper function which should be ran in non-batch mode.
+    A HuggingFace Datasets mapper function which should be ran in non-batch mode
+    when the data to be tokenized contains a list of a list of texts else
+    best ran in batch mode to make the most of the tokenizer. Batch mode can be
+    ran with a list of a list of strings if and only if the inner list is a
+    list of tokens and the `is_split_into_words` argument is set to True.
 
     Args:
         data (dict[str, list[str]]): Data containing the text to be tokenized.
@@ -509,14 +522,24 @@ def tokenize_key(
             the output keys like so `{output_key_prefix}_`. Default an
             empty string ("").
         add_word_ids (bool): Whether to include Word IDs in the output.
+            Default True.
+        is_split_into_words (bool): Sets the `is_split_into_words` argument
+            for the tokenizer. If the text_key is already tokenized this should
+            be True else False. Default False.
+        truncation (bool): Sets the `truncation` argument for the tokenizer.
+            When False it means that the tokenizer could produce token sequences
+            that are longer than the maximum intended sequence length of the
+            model associated to the given tokenizer. Default False.
     Returns:
         dict[str, list[list[int | None]] | list[list[list[int | None]]]]: The
             tokenized text represented by `input_ids` and `attention_mask`.
     """
 
-    def _tokenize_text_list(text_list: list[str]) -> dict[str, list[int]]:
+    def _tokenize_text_list(
+        text_list: list[str] | list[list[str]],
+    ) -> dict[str, list[int]]:
         tokenized_text_output = tokenizer(
-            text_list, truncation=True, is_split_into_words=False
+            text_list, truncation=truncation, is_split_into_words=is_split_into_words
         )
         tokenized_text = tokenized_text_output.data
         if output_key_prefix:
@@ -527,16 +550,22 @@ def tokenize_key(
 
         if add_word_ids:
             all_word_ids = []
-            for text_index in range(len(text_list)):
-                word_ids = tokenized_text_output.word_ids(text_index)
-                all_word_ids.append(word_ids)
+            # Special case handling for when the input text is just tokens
+            # and is not batched.
+            if is_split_into_words and isinstance(text_list[0], str):
+                word_ids = tokenized_text_output.word_ids(0)
+                all_word_ids = word_ids
+            else:
+                for text_index in range(len(text_list)):
+                    word_ids = tokenized_text_output.word_ids(text_index)
+                    all_word_ids.append(word_ids)
             word_ids_key = "word_ids"
             if output_key_prefix:
                 word_ids_key = f"{output_key_prefix}_{word_ids_key}"
             tokenized_text[word_ids_key] = all_word_ids
         return tokenized_text
 
-    if isinstance(data[text_key][0], list):
+    if isinstance(data[text_key][0], list) and not is_split_into_words:
         tokenized_outputs = defaultdict(list)
         for text_list in data[text_key]:
             for key, value in _tokenize_text_list(text_list).items():
