@@ -1,4 +1,4 @@
-from collections import Counter
+from collections import Counter, defaultdict
 from typing import Any, Callable
 
 import transformers
@@ -422,25 +422,74 @@ def filter_empty_values(data: dict[str, list[Any]], key: str) -> bool:
     return False
 
 
-# Need to create a function that will remove token level entries if one is empty
+def map_empty_removal_token_values(
+    data: dict[str, list[str | None] | list[list[str]]],
+    filter_key: str,
+    aligned_keys: list[str],
+) -> dict[str, list[str | None] | list[list[str]]]:
+    """
+    Given a filter key, it is assumed that value in this key is a list as well
+    all values associated to the aligned_keys, it will remove all values in that
+    filter key if they are empty/evaluate to False, in addition all values that are
+    empty their associated values in the aligned keys will also be removed. It
+    will return a dictionary of filter and aligned keys with their associated
+    filtered values.
+
+    Args:
+        data (dict[str, list[str | None] | list[list[str]]]): The data to be
+            filtered.
+        filter_key (str): The key to filter by
+        aligned_keys (list[str]): The keys of data that have to be filtered if
+            any data is filtered within the filter key.
+    Returns:
+        dict[str, list[str | None] | list[list[str]]]: The filtered data which
+            will contain the filtered and aligned keys and the their associated
+            filtered values.
+    Raises:
+        ValueError: If the lengths of the values of the filter and aligned keys
+            are not the same.
+    """
+    expected_value_lengths = len(data[filter_key])
+    for key in aligned_keys:
+        if expected_value_lengths != len(data[key]):
+            raise ValueError(
+                f"The lengths of the lists of the aligned keys {aligned_keys} "
+                "must be the same, but they are not for this "
+                f"sample: {data}"
+            )
+    new_key_values = {key: [] for key in [*aligned_keys, filter_key]}
+    for index, filter_value in enumerate(data[filter_key]):
+        if not filter_value:
+            continue
+        new_key_values[filter_key].append(filter_value)
+        for key in aligned_keys:
+            new_key_values[key].append(data[key][index])
+    return new_key_values
 
 
 def tokenize_key(
-    batched_data: dict[str, list[str]],
+    batched_data: dict[str, list[str] | list[list[str]]],
     tokenizer: transformers.PreTrainedTokenizerFast,
     text_key: str,
     output_key_prefix: str = "",
-) -> dict[str, list[list[int]]]:
+    add_word_ids: bool = True,
+) -> dict[str, list[list[int]] | list[list[list[int]]]]:
     """
     Given a batch of data with the following key, values;
-    * `text_key` (list[str]): The batch of texts to be tokenized
+    * `text_key` (list[str] | list[list[str]]): The batch of texts to be tokenized.
+        It can be a batch of a batch of texts in this case this is represented
+        in the output having an additional outer list.
     It will tokenize the text with the given tokenizer and return the following
     key, values;
-    * `{output_key_prefix}_input_ids` (list[list[int]]): For each text a list
-        integers representing the token indexes.
-    * `{output_key_prefix}_attention_mask` (list[list[int]]): For each text
-        a list of 1 or 0s representing the attention mask for each token.
+    * `{output_key_prefix}_input_ids` (list[list[int]] | list[list[list[int]]]):
+        For each text a list integers representing the token indexes.
+    * `{output_key_prefix}_attention_mask` (list[list[int]] | list[list[list[int]]]):
+        For each text a list of 1 or 0s representing the attention mask for each token.
         In practice it is a list of 1s as no padding is performed.
+    * `{output_key_prefix}_word_ids` (list[list[int | None]] | list[list[list[int | None]]]):
+        For each text a list of ids representing the mapping between sub word
+        token and the word it is linked too. The Word IDs for special tokens
+        like <CLS> is `None`. Optional.
 
     If `output_key_prefix` is empty then they keys will be `input_ids` and
     `attention_mask`.
@@ -457,19 +506,42 @@ def tokenize_key(
         output_key_prefix (str): If not an empty string, "", then it will prefix
             the output keys like so `{output_key_prefix}_`. Default an
             empty string ("").
+        add_word_ids (bool): Whether to include Word IDs in the output.
     Returns:
-        dict[str, list[list[int]]]: The tokenized text represented as by
-            `input_ids` and `attention_mask`.
+        dict[str, list[list[int | None]] | list[list[list[int | None]]]]: The
+            tokenized text represented by `input_ids` and `attention_mask`.
     """
-    tokenized_key = tokenizer(
-        batched_data[text_key], truncation=True, is_split_into_words=False
-    )
-    if output_key_prefix:
-        tmp_tokenized_key = {}
-        for key, value in tokenized_key.items():
-            tmp_tokenized_key[f"{output_key_prefix}_{key}"] = value
-        tokenized_key = tmp_tokenized_key
-    return tokenized_key
+
+    def _tokenize_text_list(text_list: list[str]) -> dict[str, list[int]]:
+        tokenized_text_output = tokenizer(
+            text_list, truncation=True, is_split_into_words=False
+        )
+        tokenized_text = tokenized_text_output.data
+        if output_key_prefix:
+            tmp_tokenized_text = {}
+            for key, value in tokenized_text.items():
+                tmp_tokenized_text[f"{output_key_prefix}_{key}"] = value
+            tokenized_text = tmp_tokenized_text
+
+        if add_word_ids:
+            all_word_ids = []
+            for text_index in range(len(text_list)):
+                word_ids = tokenized_text_output.word_ids(text_index)
+                all_word_ids.append(word_ids)
+            word_ids_key = "word_ids"
+            if output_key_prefix:
+                word_ids_key = f"{output_key_prefix}_{word_ids_key}"
+            tokenized_text[word_ids_key] = all_word_ids
+        return tokenized_text
+
+    if isinstance(batched_data[text_key][0], list):
+        tokenized_outputs = defaultdict(list)
+        for text_list in batched_data[text_key]:
+            for key, value in _tokenize_text_list(text_list).items():
+                tokenized_outputs[key].append(value)
+        return dict(tokenized_outputs)
+    else:
+        return _tokenize_text_list(batched_data[text_key])
 
 
 def map_to_definitions(

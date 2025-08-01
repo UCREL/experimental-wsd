@@ -8,6 +8,7 @@ from wn.compat import sensekey
 from experimental_wsd.data_processing_utils import (
     filter_empty_values,
     get_align_labels_with_tokens,
+    map_empty_removal_token_values,
     map_negative_sense_ids,
     map_to_definitions,
     map_token_sense_labels,
@@ -238,8 +239,44 @@ def test_filter_empty_values():
     assert filter_empty_values({"key": ["yes", "no"]}, "key")
 
 
-@pytest.mark.parametrize("output_key_prefix", [""])
-def test_tokenize_key(output_key_prefix: str):
+def test_map_empty_removal_token_values():
+    # Case that nothing should be removed.
+    test_data = {
+        "lemmas": ["hi", "how", "are", "you"],
+        "pos": [None, "v", "n", "a"],
+        "senses": [["25", "36"], ["45"], ["2"], ["1"]],
+    }
+    assert test_data == map_empty_removal_token_values(
+        test_data, "senses", ["lemmas", "pos"]
+    )
+    # Case whereby nothing is removed but as we did not pass any aligned keys only
+    # the filtered key and it's value should be returned
+    assert {
+        "senses": [["25", "36"], ["45"], ["2"], ["1"]]
+    } == map_empty_removal_token_values(test_data, "senses", [])
+
+    # Case whereby one of the sense values is empty therefore it and it's aligned
+    # values should be filtered out
+    test_data["senses"] = [["25", "36"], [], ["2"], ["1"]]
+    expected_output = {
+        "lemmas": ["hi", "are", "you"],
+        "pos": [None, "n", "a"],
+        "senses": [["25", "36"], ["2"], ["1"]],
+    }
+    assert expected_output == map_empty_removal_token_values(
+        test_data, "senses", ["lemmas", "pos"]
+    )
+
+    # Test the case whereby an aligned value is not the same length as the
+    # filter key value
+    test_data["pos"] = [None, None, None]
+    with pytest.raises(ValueError):
+        map_empty_removal_token_values(test_data, "senses", ["lemmas", "pos"])
+
+
+@pytest.mark.parametrize("add_word_ids", [True, False])
+@pytest.mark.parametrize("output_key_prefix", ["", "test"])
+def test_tokenize_key(output_key_prefix: str, add_word_ids: bool):
     text_key = "gloss"
     test_data = {text_key: ["Hello how are you", "I am ok", ""]}
 
@@ -247,13 +284,38 @@ def test_tokenize_key(output_key_prefix: str):
         "input_ids": [[0, 20920, 141, 32, 47, 2], [0, 38, 524, 15983, 2], [0, 2]],
         "attention_mask": [[1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1], [1, 1]],
     }
+    if add_word_ids:
+        expected_output["word_ids"] = [
+            [None, 0, 1, 2, 3, None],
+            [None, 0, 1, 2, None],
+            [None, None],
+        ]
     if output_key_prefix:
         tmp_expected_output = {}
-        for key, value in expected_output:
+        for key, value in expected_output.items():
             tmp_expected_output[f"{output_key_prefix}_{key}"] = value
         expected_output = tmp_expected_output
     assert expected_output == tokenize_key(
-        test_data, TOKENIZER, text_key, output_key_prefix
+        test_data, TOKENIZER, text_key, output_key_prefix, add_word_ids
+    )
+
+    test_multiple_list_data = {text_key: [["Hello how are you"], ["I am ok", ""]]}
+    expected_output = {
+        "input_ids": [[[0, 20920, 141, 32, 47, 2]], [[0, 38, 524, 15983, 2], [0, 2]]],
+        "attention_mask": [[[1, 1, 1, 1, 1, 1]], [[1, 1, 1, 1, 1], [1, 1]]],
+    }
+    if add_word_ids:
+        expected_output["word_ids"] = [
+            [[None, 0, 1, 2, 3, None]],
+            [[None, 0, 1, 2, None], [None, None]],
+        ]
+    if output_key_prefix:
+        tmp_expected_output = {}
+        for key, value in expected_output.items():
+            tmp_expected_output[f"{output_key_prefix}_{key}"] = value
+        expected_output = tmp_expected_output
+    assert expected_output == tokenize_key(
+        test_multiple_list_data, TOKENIZER, text_key, output_key_prefix, add_word_ids
     )
 
 
