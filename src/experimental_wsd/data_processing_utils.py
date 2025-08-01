@@ -467,8 +467,11 @@ def map_empty_removal_token_values(
     return new_key_values
 
 
+# def token_word_id_mask(batche)
+
+
 def tokenize_key(
-    batched_data: dict[str, list[str] | list[list[str]]],
+    data: dict[str, list[str] | list[list[str]]],
     tokenizer: transformers.PreTrainedTokenizerFast,
     text_key: str,
     output_key_prefix: str = "",
@@ -494,14 +497,13 @@ def tokenize_key(
     If `output_key_prefix` is empty then they keys will be `input_ids` and
     `attention_mask`.
 
-    A HuggingFace Datasets mapper function which should be ran in batch mode.
+    A HuggingFace Datasets mapper function which should be ran in non-batch mode.
 
     Args:
-        batched_data (dict[str, list[str]]): Batched data containing the
-            text to be tokenized.
+        data (dict[str, list[str]]): Data containing the text to be tokenized.
         tokenizer (transformers.PreTrainedTokenizerFast): The tokenizer to
             tokenize the text with.
-        text_key (str): The key in the `batched_data` that represents the
+        text_key (str): The key in the `data` that represents the
             text to be tokenized.
         output_key_prefix (str): If not an empty string, "", then it will prefix
             the output keys like so `{output_key_prefix}_`. Default an
@@ -534,14 +536,14 @@ def tokenize_key(
             tokenized_text[word_ids_key] = all_word_ids
         return tokenized_text
 
-    if isinstance(batched_data[text_key][0], list):
+    if isinstance(data[text_key][0], list):
         tokenized_outputs = defaultdict(list)
-        for text_list in batched_data[text_key]:
+        for text_list in data[text_key]:
             for key, value in _tokenize_text_list(text_list).items():
                 tokenized_outputs[key].append(value)
         return dict(tokenized_outputs)
     else:
-        tokenized_outputs = _tokenize_text_list(batched_data[text_key])
+        tokenized_outputs = _tokenize_text_list(data[text_key])
         return tokenized_outputs
 
 
