@@ -8,6 +8,7 @@ from transformers import AutoTokenizer
 
 from experimental_wsd.training_utils import (
     AscendingSequenceLengthBatchSampler,
+    AscendingTokenNegativeExamplesBatchSampler,
     collate_token_classification_dataset,
     get_prefix_suffix_special_token_indexes,
     read_from_jsonl_file,
@@ -103,6 +104,75 @@ def test_ascending_sequence_length_batch_sampler(random: bool, with_replacement:
         assert len(batch_indexes) == len(set(batch_indexes))
 
     expected_batch_indexes = [4, 3, 1, 0, 2]
+    if not random:
+        assert expected_batch_indexes == batch_indexes
+    else:
+        assert expected_batch_indexes != batch_indexes
+
+
+@pytest.mark.flaky(reruns=3)
+@pytest.mark.parametrize("random", [False, True])
+@pytest.mark.parametrize("with_replacement", [False, True])
+def test_ascending_token_negative_examples_batch_sampler(
+    random: bool, with_replacement: bool
+):
+    positive_sample_key = "positive_labels"
+    negative_sample_key = "negative_labels"
+    test_data = [
+        {
+            positive_sample_key: [0, 1, 2, 3],
+            negative_sample_key: [[0, 1], [0], [0, 1, 2], [0]],
+        },
+        {
+            positive_sample_key: [0],
+            negative_sample_key: [[0, 1]],
+        },
+        {
+            positive_sample_key: [0, 1],
+            negative_sample_key: [[0], [0, 1, 2, 3, 4, 5, 6, 7, 8]],
+        },
+    ]
+    sampler = AscendingTokenNegativeExamplesBatchSampler(
+        test_data,
+        batch_size=2,
+        positive_sample_key=positive_sample_key,
+        negative_sample_key=negative_sample_key,
+        random=random,
+        with_replacement=with_replacement,
+    )
+    expected_batch_lengths = set([1, 2])
+    expected_total_size = 3
+    total_size = 0
+    batch_indexes = []
+    for batch_index, batch in enumerate(sampler):
+        assert isinstance(batch, list)
+        assert isinstance(batch[0], int)
+        batch_size = len(batch)
+        if not random:
+            if batch_index == 1:
+                assert 1 == batch_size
+            else:
+                assert 2 == batch_size
+        else:
+            assert batch_size in expected_batch_lengths
+        total_size += batch_size
+        batch_indexes += batch
+    # Can be the case that with_replacement selects the smallest batch for all
+    # batch indexes
+    if random and with_replacement:
+        minimum_total_size = 2
+        assert minimum_total_size <= total_size
+        assert expected_total_size >= total_size
+    else:
+        assert expected_total_size == total_size, batch_indexes
+
+    # Expect the indexes that are returned to be unique
+    if random and with_replacement:
+        assert len(batch_indexes) != len(set(batch_indexes))
+    else:
+        assert len(batch_indexes) == len(set(batch_indexes))
+
+    expected_batch_indexes = [1, 0, 2]
     if not random:
         assert expected_batch_indexes == batch_indexes
     else:

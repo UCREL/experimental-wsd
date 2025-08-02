@@ -105,7 +105,7 @@ def read_from_jsonl_file(file_path: Path) -> Iterable[dict[Any, Any]]:
 class AscendingSequenceLengthBatchSampler(Sampler[list[int]]):
     """
     A sampler that generates batch indexes in ascending order of length according
-    to the `length_key`. In addition these ascending order or length batches can
+    to the `length_key`. In addition these ascending order of length batches can
     be generated in random order with or without replacement. For instances
     onces all of the batch indexes have been created we then perform a random order
     index so that the batches still contain samples that have a similar length
@@ -150,6 +150,96 @@ class AscendingSequenceLengthBatchSampler(Sampler[list[int]]):
 
     def __iter__(self) -> Iterator[list[int]]:
         sizes = torch.tensor([len(x[self.length_key]) for x in self.data])
+        number_batches = len(self)
+        batch_index_chunks = list(torch.chunk(torch.argsort(sizes), number_batches))
+        indexes_of_batch_index_chunks = torch.arange(
+            0, number_batches, dtype=torch.float
+        )
+        if self.random:
+            random_indexes_of_batch_index_chunks = torch.multinomial(
+                indexes_of_batch_index_chunks,
+                number_batches,
+                replacement=self.with_replacement,
+            )
+            indexes_of_batch_index_chunks = random_indexes_of_batch_index_chunks
+        else:
+            # Indexes have to be of dtype long and not float, hence the conversion.
+            indexes_of_batch_index_chunks = indexes_of_batch_index_chunks.to(
+                dtype=torch.long
+            )
+
+        for index_of_batch_index_chunks in indexes_of_batch_index_chunks:
+            batch_index_chunk = batch_index_chunks[index_of_batch_index_chunks]
+            yield batch_index_chunk.tolist()
+
+
+class AscendingTokenNegativeExamplesBatchSampler(Sampler[list[int]]):
+    """
+    A sampler that generates batch indexes in ascending order of number of
+    positive samples (M) within a sequence multiplied by the
+    maximum number of negative samples (N) for a positive sample within that
+    sequence.
+
+    The length of the data is not the number of positive samples but rather
+    the number of sequences whereby the number of samples in a sequence in
+    variable.
+    """
+
+    def __init__(
+        self,
+        data: list[dict[str, Any]],
+        batch_size: int,
+        positive_sample_key: str,
+        negative_sample_key: str,
+        random: bool = True,
+        with_replacement: bool = False,
+    ) -> None:
+        """
+        Args:
+            data (list[dict[str, Any]]): The data to batch. The outer list represents
+                the number of samples in the dataset. The inner dictionary represents
+                the data, e.g. `positive_label_input_ids`, `negative_label_input_ids`, etc.
+            batch_size (int): The batch size.
+            positive_sample_key (str): The key that represents the positive
+                samples within a sequence. The value of the key per sequence
+                should be a list of strings/list of integer IDS representing
+                tokens.
+            negative_sample_key (str): The key that represents the negative
+                samples within a sequence. The value of the key per sequence
+                should be a list of a list of strings/list of integer IDS representing
+                tokens. The outer list per sequence should be the same size as the
+                positive sample key value list and the inner list is variable
+                in length as each positive sample can have a different number
+                of negative samples.
+            random (bool): If True then the batches with similar sizes will be
+                yielded in random order rather than the ascending order.
+                This is useful when you want to have similar sized batches but in random
+                order. Default True.
+            with_replacement (bool): When `random` is `True` then this sets the
+                `replacement` argument. Default False.
+        """
+        self.data = data
+        self.batch_size = batch_size
+        self.positive_sample_key = positive_sample_key
+        self.negative_sample_key = negative_sample_key
+        self.random = random
+        self.with_replacement = with_replacement
+
+    def __len__(self) -> int:
+        return (len(self.data) + self.batch_size - 1) // self.batch_size
+
+    def __iter__(self) -> Iterator[list[int]]:
+        sizes = []
+        for sequence in self.data:
+            number_positive_samples = len(sequence[self.positive_sample_key])
+            largest_number_negative_samples = 0
+            for negative_sample in sequence[self.negative_sample_key]:
+                number_negative_samples = len(negative_sample)
+                if number_negative_samples > largest_number_negative_samples:
+                    largest_number_negative_samples = number_negative_samples
+            sequence_size = number_positive_samples * largest_number_negative_samples
+            sizes.append(sequence_size)
+        sizes = torch.tensor(sizes)
         number_batches = len(self)
         batch_index_chunks = list(torch.chunk(torch.argsort(sizes), number_batches))
         indexes_of_batch_index_chunks = torch.arange(
