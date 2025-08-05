@@ -1,3 +1,4 @@
+import copy
 import json
 import logging
 from collections import defaultdict
@@ -263,16 +264,291 @@ class AscendingTokenNegativeExamplesBatchSampler(Sampler[list[int]]):
             yield batch_index_chunk.tolist()
 
 
-def collate_token_classification_dataset(
+def collate_token_negative_examples_classification_dataset(
     tokenizer: PreTrainedTokenizerFast,
-    label_keys: set = set(["labels", "word_ids"]),
-    attention_mask_keys: set = set(["attention_mask"]),
+    label_key: str = "labels",
+    text_token_word_ids_mask_key: str = "text_word_ids_mask",
+    text_keys: set[str] = set(["text_input_ids", "text_attention_mask"]),
+    positive_samples_keys: set[str] = set(
+        ["positive_input_ids", "positive_attention_mask"]
+    ),
+    negative_samples_keys: set[str] = set(
+        ["negative_input_ids", "negative_attention_mask"]
+    ),
+    attention_mask_keys: set[str] = set(
+        [
+            "positive_attention_mask",
+            "negative_attention_mask",
+            "text_attention_mask",
+            "text_word_ids_mask",
+        ]
+    ),
     label_pad_id: int = -100,
     attention_pad_id: int = 0,
 ) -> Callable[[list[dict[str, list[int]]]], dict[str, torch.Tensor]]:
     """
     This generates a function that converts a batch, 1 or more samples, of
-    token classification data into format suitable as input into a machine
+    token level semantic similarity data (whereby a token/MWE has 1 positive
+    similar sentence and N negative/dis-similar sentences) into a a format
+    suitable as input into a machine learning model for either training or
+    inference.
+
+    Args:
+
+        text_keys (set[str]): All of the text sample keys, should not include
+            the `text_token_word_ids_mask_key`.
+            Default set([text_input_ids, text_attention_mask])
+    """
+
+    def _collate(data: list[dict[str, list[int]]]) -> dict[str, torch.Tensor]:
+        """
+        Expects a batch, 1 or more samples, of token level semantic similarity data
+        and returns the data so that the dictionary keys are the same with one
+        additional key `label_key` with each value as a torch tensor containing
+        a batch of data whereby the dimensions are the same for the relevant keys;
+
+        B represents the batch size. This is the number of text sequences.
+        M represents the largest number of positive samples within one text
+        sequence.
+        N represents the largest number of negative samples for a positive sample
+        within the batch of sequences (Z).
+        T represents the largest token length for the text sample.
+        PT represents the largest token length for the positive text samples.
+        NT represents the largest token length for the negative text samples.
+
+        `positive` input and attention IDs keys will have a value
+        of a torch tensor with the following shape; (B, M, PT)
+        `negative` input and attention IDs keys will have a value
+        of a torch tensor with the following shape; (B, M, N, NT)
+        `text` input, and attention mask will have a value
+        of a torch tensor with the following shape; (B, T)
+        `text` token word ids mask will have a value of a torch tensor with the
+        following shape; (B, M, T)
+        `label_key` tensor will have a value of a torch tensor with the following
+        shape; (B, M, 1 + N)
+
+        The additional 1 on the N for the `label_key` is the positive sample whereby
+        the positive example is expected to be the first value.
+
+        All the keys apart from the `text` input, and attention mask can contain
+        entire vectors of tokenizer, attention, or label pad/masking IDs. This is
+        due to the fact that not all text sequences will have the same number of
+        positive or negative samples.
+
+        Args:
+            data (list[dict[str, list[int]]]): The outer list is the batch size
+                and each dictionary should contain the same key names.
+        Returns:
+            dict[str, torch.Tensor]: A dictionary that has the key names as in the
+                given argument dictionaries with the addition of `label_key`, but
+                each value will be a torch tensor.
+        """
+
+        def _pad_sequence(
+            padding_token: int,
+            padding_side: str,
+            sequence: list[int],
+            expected_sequence_length: int,
+        ) -> torch.Tensor:
+            tensor_value = torch.tensor(sequence, dtype=torch.long)
+            pad_length = expected_sequence_length - tensor_value.size(-1)
+            if pad_length == 0:
+                return tensor_value
+            pad_tensor = torch.tensor([padding_token] * pad_length, dtype=torch.long)
+            if padding_side == "right":
+                tensor_value = torch.hstack((tensor_value, pad_tensor))
+            else:
+                tensor_value = torch.hstack((pad_tensor, tensor_value))
+            return tensor_value
+
+        def _add_padding_lists(
+            sequence: list[Any], expected_sequence_length: int
+        ) -> list[Any]:
+            pad_length = expected_sequence_length - len(sequence)
+            copied_sequence = copy.deepcopy(sequence)
+            if pad_length == 0:
+                return copied_sequence
+            else:
+                for _ in range(pad_length):
+                    copied_sequence.append([])
+                return copied_sequence
+
+        padding_side = tokenizer.padding_side
+        text_padding_token = tokenizer.pad_token_id
+
+        largest_number_positive_samples = 0  # The M value
+        largest_number_of_negative_samples = 0  # The N value
+        largest_positive_token_sequence = 0  # The PT value
+        largest_negative_token_sequence = 0  # The NT value
+        largest_text_token_sequence = 0  # The T value
+        batch_size = len(data)
+
+        number_of_negatives_per_positive_sample = defaultdict(defaultdict)
+
+        for batch_index, instance in enumerate(data):
+            positive_sample_length_tested = False
+            negative_sample_length_tested = False
+            text_sample_length_tested = False
+            for key, value in instance.items():
+                # Positive sample lengths
+                if key in positive_samples_keys and not positive_sample_length_tested:
+                    number_positive_samples = len(value)
+                    if number_positive_samples > largest_number_positive_samples:
+                        largest_number_positive_samples = number_positive_samples
+                    for positive_sample in value:
+                        positive_sample_length = len(positive_sample)
+                        if positive_sample_length > largest_positive_token_sequence:
+                            largest_positive_token_sequence = positive_sample_length
+                    positive_sample_length_tested = True
+                # Negative sample lengths
+                if key in negative_samples_keys and not negative_sample_length_tested:
+                    number_positive_samples = len(value)
+                    if not number_positive_samples:
+                        continue
+                    for positive_sample_index, positive_sample in enumerate(value):
+                        number_negative_samples = len(positive_sample)
+
+                        number_of_negatives_per_positive_sample[batch_index][
+                            positive_sample_index
+                        ] = number_negative_samples
+
+                        if number_negative_samples > largest_number_of_negative_samples:
+                            largest_number_of_negative_samples = number_negative_samples
+                        for negative_sample_index, negative_sample in enumerate(
+                            positive_sample
+                        ):
+                            negative_sample_length = len(negative_sample)
+                            if negative_sample_length > largest_negative_token_sequence:
+                                largest_negative_token_sequence = negative_sample_length
+                    negative_sample_length_tested = True
+                # Text sample lengths
+                if key in text_keys and not text_sample_length_tested:
+                    text_sample_length = len(value)
+                    if text_sample_length > largest_text_token_sequence:
+                        largest_text_token_sequence = text_sample_length
+                    text_sample_length_tested = True
+
+        labels_tensor = torch.zeros(
+            (
+                batch_size,
+                largest_number_positive_samples,
+                largest_number_of_negative_samples + 1,
+            ),
+            dtype=torch.long,
+        )
+        labels_tensor += label_pad_id
+
+        for batch_index in number_of_negatives_per_positive_sample:
+            for (
+                instance_index,
+                number_negative_samples,
+            ) in number_of_negatives_per_positive_sample[batch_index].items():
+                labels_tensor[batch_index][instance_index][0] = 1
+                for negative_sample_index in range(1, number_negative_samples + 1):
+                    labels_tensor[batch_index][instance_index][
+                        negative_sample_index
+                    ] = 0
+
+        batched_dict = defaultdict(list)
+
+        for instance in data:
+            for key, value in instance.items():
+                if key in text_keys:
+                    padding_token = text_padding_token
+                    if key in attention_mask_keys:
+                        padding_token = attention_pad_id
+                    batched_dict[key].append(
+                        _pad_sequence(
+                            padding_token,
+                            padding_side,
+                            value,
+                            largest_text_token_sequence,
+                        )
+                    )
+                elif (
+                    key == text_token_word_ids_mask_key or key in positive_samples_keys
+                ):
+                    padded_value = _add_padding_lists(
+                        value, largest_number_positive_samples
+                    )
+
+                    positive_padding_id = attention_pad_id
+                    if key not in attention_mask_keys:
+                        positive_padding_id = text_padding_token
+
+                    largest_token_sequence = largest_positive_token_sequence
+                    if key == text_token_word_ids_mask_key:
+                        largest_token_sequence = largest_text_token_sequence
+
+                    for positive_key_value_index in range(len(padded_value)):
+                        positive_key_value = padded_value[positive_key_value_index]
+                        padded_positive_key_value = _pad_sequence(
+                            positive_padding_id,
+                            padding_side,
+                            positive_key_value,
+                            largest_token_sequence,
+                        )
+                        padded_value[positive_key_value_index] = (
+                            padded_positive_key_value
+                        )
+
+                    stacked_padded_value = torch.vstack(padded_value).unsqueeze(0)
+                    batched_dict[key].append(stacked_padded_value)
+                elif key in negative_samples_keys:
+                    padded_value = _add_padding_lists(
+                        value, largest_number_positive_samples
+                    )
+                    negative_padding_id = attention_pad_id
+                    if key not in attention_mask_keys:
+                        negative_padding_id = text_padding_token
+
+                    for positive_key_value_index in range(len(padded_value)):
+                        positive_key_value = padded_value[positive_key_value_index]
+                        padded_positive_key_value = _add_padding_lists(
+                            positive_key_value, largest_number_of_negative_samples
+                        )
+                        for negative_key_value_index in range(
+                            len(padded_positive_key_value)
+                        ):
+                            negative_key_value = padded_positive_key_value[
+                                negative_key_value_index
+                            ]
+                            padded_negative_key_value = _pad_sequence(
+                                negative_padding_id,
+                                padding_side,
+                                negative_key_value,
+                                largest_negative_token_sequence,
+                            )
+                            padded_positive_key_value[negative_key_value_index] = (
+                                padded_negative_key_value
+                            )
+                        padded_value[positive_key_value_index] = torch.vstack(
+                            padded_positive_key_value
+                        ).unsqueeze(0)
+                    stacked_padded_value = torch.vstack(padded_value).unsqueeze(0)
+                    batched_dict[key].append(stacked_padded_value)
+
+        tensor_batched_dict = {}
+        for key, value in batched_dict.items():
+            stacked_value = torch.vstack(value)
+            tensor_batched_dict[key] = stacked_value
+        tensor_batched_dict[label_key] = labels_tensor
+
+        return tensor_batched_dict
+
+    return _collate
+
+
+def collate_token_classification_dataset(
+    tokenizer: PreTrainedTokenizerFast,
+    label_keys: set[str] = set(["labels", "word_ids"]),
+    attention_mask_keys: set[str] = set(["attention_mask"]),
+    label_pad_id: int = -100,
+    attention_pad_id: int = 0,
+) -> Callable[[list[dict[str, list[int]]]], dict[str, torch.Tensor]]:
+    """
+    This generates a function that converts a batch, 1 or more samples, of
+    token classification data into format a suitable as input into a machine
     learning model for either training or inference.
 
     Args:
@@ -324,8 +600,8 @@ def collate_token_classification_dataset(
 
         # max_length = max(tensor_lengths)
         key_max_length = {
-            key: max(tensor_legnths)
-            for key, tensor_legnths in key_tensor_lengths.items()
+            key: max(tensor_lengths)
+            for key, tensor_lengths in key_tensor_lengths.items()
         }
         for instance in data:
             for key, value in instance.items():

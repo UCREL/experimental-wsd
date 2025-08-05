@@ -10,6 +10,7 @@ from experimental_wsd.training_utils import (
     AscendingSequenceLengthBatchSampler,
     AscendingTokenNegativeExamplesBatchSampler,
     collate_token_classification_dataset,
+    collate_token_negative_examples_classification_dataset,
     get_prefix_suffix_special_token_indexes,
     read_from_jsonl_file,
     write_to_jsonl,
@@ -409,6 +410,401 @@ def test_collate_token_classification_dataset(
             [
                 [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
                 [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+            ],
+            dtype=torch.long,
+        ),
+    }
+
+    assert len(expected_collated_data) == len(collated_test_data)
+    for data_key_name, expected_batched_data in expected_collated_data.items():
+        assert (
+            expected_batched_data.tolist() == collated_test_data[data_key_name].tolist()
+        ), data_key_name
+
+
+@pytest.mark.parametrize(
+    "tokenizer_name", ["FacebookAI/roberta-base", "jhu-clsp/ettin-encoder-17m"]
+)
+@pytest.mark.parametrize("expected_label_pad_id", [-100, 50])
+@pytest.mark.parametrize("expected_attention_pad_id", [0, -51])
+@pytest.mark.parametrize("attention_mask_key", ["attention_mask", "sequence_mask"])
+@pytest.mark.parametrize("label_key_name", ["labels", "label_sequence"])
+@pytest.mark.parametrize("word_ids_key", ["word_ids", "token_ids"])
+def test_collate_token_negative_examples_classification_dataset(
+    tokenizer_name: str,
+    expected_label_pad_id: int,
+    expected_attention_pad_id: int,
+    attention_mask_key: str,
+    label_key_name: str,
+    word_ids_key: str,
+):
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
+    assert "right" == tokenizer.padding_side
+
+    positive_input_ids = "positive_input_ids"
+    negative_input_ids = "negative_input_ids"
+    text_input_ids = "text_input_ids"
+    positive_attention_mask = f"positive_{attention_mask_key}"
+    negative_attention_mask = f"negative_{attention_mask_key}"
+    text_attention_mask = f"text_{attention_mask_key}"
+    text_word_ids = f"text_{word_ids_key}"
+
+    # The first test data sample contain a text sequence with:
+    # 2 samples, first sample contain 2 negative examples and the second 1 negative example
+    # Second test data sample contains a text sequence with:
+    # 1 sample, first sample contains 4 negative examples.
+    test_data = [
+        {
+            positive_input_ids: [list(range(5)), list(range(2))],
+            positive_attention_mask: [[1] * 5, [1] * 2],
+            negative_input_ids: [[list(range(6)), list(range(3))], [list(range(4))]],
+            negative_attention_mask: [[[1] * 6, [1] * 3], [[1] * 4]],
+            text_input_ids: list(range(7)),
+            text_attention_mask: [1] * 7,
+            text_word_ids: [[0, 1, 0, 0, 0, 0, 0], [0, 0, 0, 0, 1, 1, 1]],
+        },
+        {
+            positive_input_ids: [list(range(6))],
+            positive_attention_mask: [[1] * 6],
+            negative_input_ids: [
+                [list(range(2)), list(range(8)), list(range(1)), list(range(3))]
+            ],
+            negative_attention_mask: [[[1] * 2, [1] * 8, [1], [1] * 3]],
+            text_input_ids: list(range(10)),
+            text_attention_mask: [1] * 10,
+            text_word_ids: [[1, 1, 0, 0, 0, 0, 0, 0, 0, 0]],
+        },
+    ]
+
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
+    assert "right" == tokenizer.padding_side
+
+    label_key = label_key_name
+    attention_mask_keys = set(
+        [
+            positive_attention_mask,
+            negative_attention_mask,
+            text_attention_mask,
+            text_word_ids,
+        ]
+    )
+    collate_function = collate_token_negative_examples_classification_dataset(
+        tokenizer,
+        label_key=label_key,
+        text_token_word_ids_mask_key=text_word_ids,
+        text_keys=[text_input_ids, text_attention_mask],
+        positive_samples_keys=[positive_input_ids, positive_attention_mask],
+        negative_samples_keys=[negative_input_ids, negative_attention_mask],
+        label_pad_id=expected_label_pad_id,
+        attention_pad_id=expected_attention_pad_id,
+        attention_mask_keys=attention_mask_keys,
+    )
+
+    collated_test_data = collate_function(test_data)
+    expected_collated_data = {
+        positive_input_ids: torch.tensor(
+            [
+                [
+                    [0, 1, 2, 3, 4, tokenizer.pad_token_id],
+                    [
+                        0,
+                        1,
+                        tokenizer.pad_token_id,
+                        tokenizer.pad_token_id,
+                        tokenizer.pad_token_id,
+                        tokenizer.pad_token_id,
+                    ],
+                ],
+                [[0, 1, 2, 3, 4, 5], [tokenizer.pad_token_id] * 6],
+            ],
+            dtype=torch.long,
+        ),
+        positive_attention_mask: torch.tensor(
+            [
+                [
+                    [1, 1, 1, 1, 1, expected_attention_pad_id],
+                    [
+                        1,
+                        1,
+                        expected_attention_pad_id,
+                        expected_attention_pad_id,
+                        expected_attention_pad_id,
+                        expected_attention_pad_id,
+                    ],
+                ],
+                [[1, 1, 1, 1, 1, 1], [expected_attention_pad_id] * 6],
+            ],
+            dtype=torch.long,
+        ),
+        negative_input_ids: torch.tensor(
+            [
+                [
+                    [
+                        [
+                            0,
+                            1,
+                            2,
+                            3,
+                            4,
+                            5,
+                            tokenizer.pad_token_id,
+                            tokenizer.pad_token_id,
+                        ],
+                        [
+                            0,
+                            1,
+                            2,
+                            tokenizer.pad_token_id,
+                            tokenizer.pad_token_id,
+                            tokenizer.pad_token_id,
+                            tokenizer.pad_token_id,
+                            tokenizer.pad_token_id,
+                        ],
+                        [tokenizer.pad_token_id] * 8,
+                        [tokenizer.pad_token_id] * 8,
+                    ],
+                    [
+                        [
+                            0,
+                            1,
+                            2,
+                            3,
+                            tokenizer.pad_token_id,
+                            tokenizer.pad_token_id,
+                            tokenizer.pad_token_id,
+                            tokenizer.pad_token_id,
+                        ],
+                        [tokenizer.pad_token_id] * 8,
+                        [tokenizer.pad_token_id] * 8,
+                        [tokenizer.pad_token_id] * 8,
+                    ],
+                ],
+                [
+                    [
+                        [
+                            0,
+                            1,
+                            tokenizer.pad_token_id,
+                            tokenizer.pad_token_id,
+                            tokenizer.pad_token_id,
+                            tokenizer.pad_token_id,
+                            tokenizer.pad_token_id,
+                            tokenizer.pad_token_id,
+                        ],
+                        [0, 1, 2, 3, 4, 5, 6, 7],
+                        [
+                            0,
+                            tokenizer.pad_token_id,
+                            tokenizer.pad_token_id,
+                            tokenizer.pad_token_id,
+                            tokenizer.pad_token_id,
+                            tokenizer.pad_token_id,
+                            tokenizer.pad_token_id,
+                            tokenizer.pad_token_id,
+                        ],
+                        [
+                            0,
+                            1,
+                            2,
+                            tokenizer.pad_token_id,
+                            tokenizer.pad_token_id,
+                            tokenizer.pad_token_id,
+                            tokenizer.pad_token_id,
+                            tokenizer.pad_token_id,
+                        ],
+                    ],
+                    [
+                        [tokenizer.pad_token_id] * 8,
+                        [tokenizer.pad_token_id] * 8,
+                        [tokenizer.pad_token_id] * 8,
+                        [tokenizer.pad_token_id] * 8,
+                    ],
+                ],
+            ],
+            dtype=torch.long,
+        ),
+        negative_attention_mask: torch.tensor(
+            [
+                [
+                    [
+                        [
+                            1,
+                            1,
+                            1,
+                            1,
+                            1,
+                            1,
+                            expected_attention_pad_id,
+                            expected_attention_pad_id,
+                        ],
+                        [
+                            1,
+                            1,
+                            1,
+                            expected_attention_pad_id,
+                            expected_attention_pad_id,
+                            expected_attention_pad_id,
+                            expected_attention_pad_id,
+                            expected_attention_pad_id,
+                        ],
+                        [expected_attention_pad_id] * 8,
+                        [expected_attention_pad_id] * 8,
+                    ],
+                    [
+                        [
+                            1,
+                            1,
+                            1,
+                            1,
+                            expected_attention_pad_id,
+                            expected_attention_pad_id,
+                            expected_attention_pad_id,
+                            expected_attention_pad_id,
+                        ],
+                        [expected_attention_pad_id] * 8,
+                        [expected_attention_pad_id] * 8,
+                        [expected_attention_pad_id] * 8,
+                    ],
+                ],
+                [
+                    [
+                        [
+                            1,
+                            1,
+                            expected_attention_pad_id,
+                            expected_attention_pad_id,
+                            expected_attention_pad_id,
+                            expected_attention_pad_id,
+                            expected_attention_pad_id,
+                            expected_attention_pad_id,
+                        ],
+                        [1, 1, 1, 1, 1, 1, 1, 1],
+                        [
+                            1,
+                            expected_attention_pad_id,
+                            expected_attention_pad_id,
+                            expected_attention_pad_id,
+                            expected_attention_pad_id,
+                            expected_attention_pad_id,
+                            expected_attention_pad_id,
+                            expected_attention_pad_id,
+                        ],
+                        [
+                            1,
+                            1,
+                            1,
+                            expected_attention_pad_id,
+                            expected_attention_pad_id,
+                            expected_attention_pad_id,
+                            expected_attention_pad_id,
+                            expected_attention_pad_id,
+                        ],
+                    ],
+                    [
+                        [expected_attention_pad_id] * 8,
+                        [expected_attention_pad_id] * 8,
+                        [expected_attention_pad_id] * 8,
+                        [expected_attention_pad_id] * 8,
+                    ],
+                ],
+            ],
+            dtype=torch.long,
+        ),
+        text_input_ids: torch.tensor(
+            [
+                [
+                    0,
+                    1,
+                    2,
+                    3,
+                    4,
+                    5,
+                    6,
+                    tokenizer.pad_token_id,
+                    tokenizer.pad_token_id,
+                    tokenizer.pad_token_id,
+                ],
+                [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+            ],
+            dtype=torch.long,
+        ),
+        text_attention_mask: torch.tensor(
+            [
+                [
+                    1,
+                    1,
+                    1,
+                    1,
+                    1,
+                    1,
+                    1,
+                    expected_attention_pad_id,
+                    expected_attention_pad_id,
+                    expected_attention_pad_id,
+                ],
+                [1] * 10,
+            ],
+            dtype=torch.long,
+        ),
+        text_word_ids: torch.tensor(
+            [
+                [
+                    [
+                        0,
+                        1,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        expected_attention_pad_id,
+                        expected_attention_pad_id,
+                        expected_attention_pad_id,
+                    ],
+                    [
+                        0,
+                        0,
+                        0,
+                        0,
+                        1,
+                        1,
+                        1,
+                        expected_attention_pad_id,
+                        expected_attention_pad_id,
+                        expected_attention_pad_id,
+                    ],
+                ],
+                [
+                    [
+                        1,
+                        1,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                    ],
+                    [expected_attention_pad_id] * 10,
+                ],
+            ],
+            dtype=torch.long,
+        ),
+        label_key_name: torch.tensor(
+            [
+                [
+                    [1, 0, 0, expected_label_pad_id, expected_label_pad_id],
+                    [
+                        1,
+                        0,
+                        expected_label_pad_id,
+                        expected_label_pad_id,
+                        expected_label_pad_id,
+                    ],
+                ],
+                [[1, 0, 0, 0, 0], [expected_label_pad_id] * 5],
             ],
             dtype=torch.long,
         ),
