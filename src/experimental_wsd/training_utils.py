@@ -311,7 +311,7 @@ def collate_token_negative_examples_classification_dataset(
         M represents the largest number of positive samples within one text
         sequence.
         N represents the largest number of negative samples for a positive sample
-        within the batch of sequences (Z).
+        within the batch of sequences (B).
         T represents the largest token length for the text sample.
         PT represents the largest token length for the positive text samples.
         NT represents the largest token length for the negative text samples.
@@ -325,7 +325,9 @@ def collate_token_negative_examples_classification_dataset(
         `text` token word ids mask will have a value of a torch tensor with the
         following shape; (B, M, T)
         `label_key` tensor will have a value of a torch tensor with the following
-        shape; (B, M, 1 + N)
+        shape; (B, M). The value of the tensor is an integer representing the
+        True label index. In all cases this will be 0 unless it is a sample to
+        ignore then it will be the `label_pad_id`.
 
         The additional 1 on the N for the `label_key` is the positive sample whereby
         the positive example is expected to be the first value.
@@ -414,9 +416,7 @@ def collate_token_negative_examples_classification_dataset(
 
                         if number_negative_samples > largest_number_of_negative_samples:
                             largest_number_of_negative_samples = number_negative_samples
-                        for negative_sample_index, negative_sample in enumerate(
-                            positive_sample
-                        ):
+                        for negative_sample in positive_sample:
                             negative_sample_length = len(negative_sample)
                             if negative_sample_length > largest_negative_token_sequence:
                                 largest_negative_token_sequence = negative_sample_length
@@ -429,11 +429,7 @@ def collate_token_negative_examples_classification_dataset(
                     text_sample_length_tested = True
 
         labels_tensor = torch.zeros(
-            (
-                batch_size,
-                largest_number_positive_samples,
-                largest_number_of_negative_samples + 1,
-            ),
+            (batch_size, largest_number_positive_samples),
             dtype=torch.long,
         )
         labels_tensor += label_pad_id
@@ -443,11 +439,7 @@ def collate_token_negative_examples_classification_dataset(
                 instance_index,
                 number_negative_samples,
             ) in number_of_negatives_per_positive_sample[batch_index].items():
-                labels_tensor[batch_index][instance_index][0] = 1
-                for negative_sample_index in range(1, number_negative_samples + 1):
-                    labels_tensor[batch_index][instance_index][
-                        negative_sample_index
-                    ] = 0
+                labels_tensor[batch_index][instance_index] = 0
 
         batched_dict = defaultdict(list)
 

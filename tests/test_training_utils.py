@@ -794,17 +794,8 @@ def test_collate_token_negative_examples_classification_dataset(
         ),
         label_key_name: torch.tensor(
             [
-                [
-                    [1, 0, 0, expected_label_pad_id, expected_label_pad_id],
-                    [
-                        1,
-                        0,
-                        expected_label_pad_id,
-                        expected_label_pad_id,
-                        expected_label_pad_id,
-                    ],
-                ],
-                [[1, 0, 0, 0, 0], [expected_label_pad_id] * 5],
+                [0, 0],
+                [0, expected_label_pad_id],
             ],
             dtype=torch.long,
         ),

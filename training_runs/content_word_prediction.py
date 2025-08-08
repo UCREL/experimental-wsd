@@ -41,6 +41,7 @@ def get_only_checkpoint_path(model_checkpoint_directory: Path) -> Path:
 
 
 base_model_name = "FacebookAI/roberta-base" # "jhu-clsp/ettin-encoder-17m"
+base_model_name = "jhu-clsp/ettin-encoder-17m" # "jhu-clsp/ettin-encoder-17m"
 #tokenizer = AutoTokenizer.from_pretrained("FacebookAI/roberta-base", add_prefix_space=True)
 tokenizer = AutoTokenizer.from_pretrained(base_model_name, add_prefix_space=True)
 #alt_tokenizer = AutoTokenizer.from_pretrained("jhu-clsp/ettin-encoder-17m", add_prefix_space=True)
@@ -108,7 +109,6 @@ model_checkpoint_callback = ModelCheckpoint(monitor=tracking_metric, save_top_k=
 trainer = L.Trainer(callbacks=[early_stopping_callback, model_checkpoint_callback],
                     gradient_clip_algorithm="norm")
 trainer.fit(model=test_classifier, train_dataloaders=train_dataset_loader, val_dataloaders=validation_dataset_loader)
-trainer.test(test_dataset_loader)
 
 
 #model_checkpoint_directory = Path("lightning_logs", "version_29", "checkpoints")
@@ -116,7 +116,8 @@ trainer.test(test_dataset_loader)
 model_checkpoint_file = model_checkpoint_callback.best_model_path
 print(f"Checkpoint file: {model_checkpoint_file}")
 
-best_token_model = TokenClassifier.load_from_checkpoint(str(model_checkpoint_file.resolve()))
+#best_token_model = TokenClassifier.load_from_checkpoint(str(model_checkpoint_file.resolve()))
+best_token_model = TokenClassifier.load_from_checkpoint(model_checkpoint_file)
 test_trainer = L.Trainer()
 test_trainer.test(best_token_model, dataloaders=test_dataset_loader)
 
