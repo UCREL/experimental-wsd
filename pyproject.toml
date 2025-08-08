@@ -46,7 +46,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.ruff]
-include = ["**/src/**/*.py", "**/tests/**/*.py", "**/pyproject.toml"]
+include = ["**/src/**/*.py", "**/tests/**/*.py", "**/training_runs/**/*.py", "**/pyproject.toml"]
 
 [tool.ruff.lint]
 # Enable the isort rules.
