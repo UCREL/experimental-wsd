@@ -2,8 +2,6 @@
 #SBATCH --partition=a5000-48h
 #SBATCH --output=log/out/deberta_v3_base_semantic_similarity_variable_negatives_%A_%a.log
 #SBATCH --error=log/error/deberta_v3_base_semantic_similarity_variable_negatives_%A_%a.log
-#SBATCH --cpus-per-task=12
-#SBATCH --gpus=1
 #SBATCH --array=0-3
 
 
