@@ -13,5 +13,5 @@ learning_rate_mapper[3]="5e-6"
 
 srun python $(pwd)/training_runs/semantic_similarity/train_and_evaluate_token_similarity_variables_negatives.py fit \
 --config $(pwd)/training_runs/semantic_similarity/variable_negatives_configs/base_config.yaml \
---config $(pwd)/training_runs/semantic_similarity/variable_negatives_configs/deberta_config.yaml \
+--config $(pwd)/training_runs/semantic_similarity/variable_negatives_configs/deberta_v3_base.yaml \
 "$@" --model.learning_rate ${learning_rate_mapper[${SLURM_ARRAY_TASK_ID}]}
