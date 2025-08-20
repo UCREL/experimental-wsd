@@ -2,8 +2,6 @@
 #SBATCH --partition=a5000-6h
 #SBATCH --output=log/out/semantic_similarity_variable_negatives_test_lr_batch_size.log
 #SBATCH --error=log/error/semantic_similarity_variable_negatives_test_lr_batch_size.log
-#SBATCH --cpus-per-task=12
-#SBATCH --gpus=1
 #SBATCH --ntasks-per-node=1
 
 
