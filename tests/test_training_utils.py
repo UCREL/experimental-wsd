@@ -9,8 +9,10 @@ from transformers import AutoTokenizer
 from experimental_wsd.training_utils import (
     AscendingSequenceLengthBatchSampler,
     AscendingTokenNegativeExamplesBatchSampler,
+    DescendingTokenSimilarityBatchSampler,
     collate_token_classification_dataset,
     collate_token_negative_examples_classification_dataset,
+    collate_variable_token_similarity_dataset,
     get_prefix_suffix_special_token_indexes,
     read_from_jsonl_file,
     write_to_jsonl,
@@ -105,6 +107,75 @@ def test_ascending_sequence_length_batch_sampler(random: bool, with_replacement:
         assert len(batch_indexes) == len(set(batch_indexes))
 
     expected_batch_indexes = [4, 3, 1, 0, 2]
+    if not random:
+        assert expected_batch_indexes == batch_indexes
+    else:
+        assert expected_batch_indexes != batch_indexes
+
+
+@pytest.mark.flaky(reruns=3)
+@pytest.mark.parametrize("random", [False, True])
+@pytest.mark.parametrize("with_replacement", [False, True])
+@pytest.mark.parametrize("batch_size", [1, 2])
+def test_descending_token_similarity_batch_sampler(
+    random: bool, with_replacement: bool, batch_size: int
+):
+    similarity_sentence_key = "sentence_labels"
+    test_data = [
+        {
+            similarity_sentence_key: [[0, 1], [0], [0, 1, 2], [0]],
+        },
+        {
+            similarity_sentence_key: [[0, 1]],
+        },
+        {
+            similarity_sentence_key: [[0], [0, 1, 2, 3, 4, 5, 6, 7, 8], [1, 2]],
+        },
+    ]
+    sampler = DescendingTokenSimilarityBatchSampler(
+        test_data,
+        batch_size=batch_size,
+        similarity_sentence_key=similarity_sentence_key,
+        random=random,
+        with_replacement=with_replacement,
+    )
+    expected_batch_lengths = set([1, 2])
+    if batch_size == 1:
+        expected_batch_lengths = set([1])
+    expected_total_size = 3
+    total_size = 0
+    batch_indexes = []
+    for batch_index, batch in enumerate(sampler):
+        assert isinstance(batch, list)
+        assert isinstance(batch[0], int)
+        sample_batch_size = len(batch)
+        if not random:
+            if batch_size==2 and batch_index == 1:
+                assert 1 == sample_batch_size
+            elif batch_size == 2:
+                assert 2 == sample_batch_size
+            else:
+                assert 1 == sample_batch_size
+        else:
+            assert batch_size in expected_batch_lengths
+        total_size += sample_batch_size
+        batch_indexes += batch
+    # Can be the case that with_replacement selects the smallest batch for all
+    # batch indexes
+    if random and with_replacement:
+        minimum_total_size = 2
+        assert minimum_total_size <= total_size
+        assert expected_total_size >= total_size
+    else:
+        assert expected_total_size == total_size, batch_indexes
+
+    # Expect the indexes that are returned to be unique
+    if random and with_replacement:
+        assert len(batch_indexes) != len(set(batch_indexes))
+    else:
+        assert len(batch_indexes) == len(set(batch_indexes))
+
+    expected_batch_indexes = [0, 2, 1]
     if not random:
         assert expected_batch_indexes == batch_indexes
     else:
@@ -796,6 +867,186 @@ def test_collate_token_negative_examples_classification_dataset(
             [
                 [0, 0],
                 [0, expected_label_pad_id],
+            ],
+            dtype=torch.long,
+        ),
+    }
+
+    assert len(expected_collated_data) == len(collated_test_data)
+    for data_key_name, expected_batched_data in expected_collated_data.items():
+        assert (
+            expected_batched_data.tolist() == collated_test_data[data_key_name].tolist()
+        ), data_key_name
+
+
+
+@pytest.mark.parametrize(
+    "tokenizer_name", ["FacebookAI/roberta-base", "jhu-clsp/ettin-encoder-17m"]
+)
+@pytest.mark.parametrize("expected_attention_pad_id", [0, -51])
+@pytest.mark.parametrize("attention_mask_key", ["attention_mask", "sequence_mask"])
+@pytest.mark.parametrize("label_key_name", ["labels", "label_sequence"])
+@pytest.mark.parametrize("word_ids_key", ["word_ids", "token_ids"])
+def test_collate_variable_token_similarity_dataset(
+    tokenizer_name: str,
+    expected_attention_pad_id: int,
+    attention_mask_key: str,
+    label_key_name: str,
+    word_ids_key: str,
+):
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
+    assert "right" == tokenizer.padding_side
+
+    label_definitions_input_ids = "label_definitions_input_ids"
+    text_input_ids = "text_input_ids"
+    label_definitions_attention_mask = f"label_definitions_{attention_mask_key}"
+    text_attention_mask = f"text_{attention_mask_key}"
+    text_word_ids = f"text_{word_ids_key}"
+
+    # first test contains 2 similar sentences, and the second contains 1 similar sentence.
+    test_data = [
+        {
+            label_definitions_input_ids: [list(range(5)), list(range(2))],
+            label_definitions_attention_mask: [[1] * 5, [1] * 2],
+            text_input_ids: list(range(7)),
+            text_attention_mask: [1] * 7,
+            text_word_ids: [0, 0, 0, 0, 1, 1, 1],
+            label_key_name: 1
+        },
+        {
+            label_definitions_input_ids: [list(range(6))],
+            label_definitions_attention_mask: [[1] * 6],
+            text_input_ids: list(range(10)),
+            text_attention_mask: [1] * 10,
+            text_word_ids: [1, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+            label_key_name: 0
+        },
+    ]
+
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
+    assert "right" == tokenizer.padding_side
+
+    label_key = label_key_name
+    collate_function = collate_variable_token_similarity_dataset(
+        tokenizer,
+        label_key=label_key,
+        text_input_ids=text_input_ids,
+        text_attention_mask=text_attention_mask,
+        text_word_ids_mask=text_word_ids,
+        similarity_sentence_input_ids=label_definitions_input_ids,
+        similarity_sentence_attention_mask=label_definitions_attention_mask,
+        attention_pad_id=expected_attention_pad_id
+    )
+
+    collated_test_data = collate_function(test_data)
+    expected_collated_data = {
+        label_definitions_input_ids: torch.tensor(
+            [
+                [
+                    [0, 1, 2, 3, 4, tokenizer.pad_token_id],
+                    [
+                        0,
+                        1,
+                        tokenizer.pad_token_id,
+                        tokenizer.pad_token_id,
+                        tokenizer.pad_token_id,
+                        tokenizer.pad_token_id,
+                    ],
+                ],
+                [[0, 1, 2, 3, 4, 5], [tokenizer.pad_token_id] * 6],
+            ],
+            dtype=torch.long,
+        ),
+        label_definitions_attention_mask: torch.tensor(
+            [
+                [
+                    [1, 1, 1, 1, 1, expected_attention_pad_id],
+                    [
+                        1,
+                        1,
+                        expected_attention_pad_id,
+                        expected_attention_pad_id,
+                        expected_attention_pad_id,
+                        expected_attention_pad_id,
+                    ],
+                ],
+                [[1, 1, 1, 1, 1, 1], [expected_attention_pad_id] * 6],
+            ],
+            dtype=torch.long,
+        ),
+        text_input_ids: torch.tensor(
+            [
+                [
+                    0,
+                    1,
+                    2,
+                    3,
+                    4,
+                    5,
+                    6,
+                    tokenizer.pad_token_id,
+                    tokenizer.pad_token_id,
+                    tokenizer.pad_token_id,
+                ],
+                [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+            ],
+            dtype=torch.long,
+        ),
+        text_attention_mask: torch.tensor(
+            [
+                [
+                    1,
+                    1,
+                    1,
+                    1,
+                    1,
+                    1,
+                    1,
+                    expected_attention_pad_id,
+                    expected_attention_pad_id,
+                    expected_attention_pad_id,
+                ],
+                [1] * 10,
+            ],
+            dtype=torch.long,
+        ),
+        text_word_ids: torch.tensor(
+            [
+                [
+                    
+                        0,
+                        0,
+                        0,
+                        0,
+                        1,
+                        1,
+                        1,
+                        expected_attention_pad_id,
+                        expected_attention_pad_id,
+                        expected_attention_pad_id,
+                    
+                ],
+                [
+                    
+                        1,
+                        1,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                        0,
+                    
+                ],
+            ],
+            dtype=torch.long,
+        ),
+        label_key_name: torch.tensor(
+            [
+                1,
+                0,
             ],
             dtype=torch.long,
         ),

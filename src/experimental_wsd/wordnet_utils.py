@@ -182,22 +182,22 @@ def get_all_senses(
 def get_negative_wordnet_sense_ids(
     lemma: str,
     pos_tag: str | None,
-    sense_id: str,
+    sense_id: list[str],
     word_net_lexicon: wn.Wordnet,
     get_random_sense: bool = False,
 ) -> list[str]:
     """
-    Given a lemma, optional POS tag, and positive sense ID, it will return all
-    of the negative Wordnet sense ids for this sample based on all of the
-    senses that are associated to the (lemma, POS tag) which are not
-    the positive word net sense ID.
+    Given a lemma, optional POS tag, and a list of positive sense ID, it will 
+    return all of the negative Wordnet sense ids for this sample based on 
+    all of the senses that are associated to the (lemma, POS tag) which are not
+    the positive word net sense IDs.
 
     Args:
         lemma (str): The lemma of the text
         pos_tag (str | None): The POS tag of the text, can be None if not known.
-        sense_id (str): The positive Wordnet sense id which should not be part
+        sense_id (str): The positive Wordnet sense ids which should not be part
             of the sense ids returned as negatives. Example would be
-            `omw-en-carrousel-02966372-n`
+            [`omw-en-carrousel-02966372-n`]
         word_net_lexicon (wn.Wordnet): Wordnet lexicon to find the senses
             of the given lemma and POS tag.
         get_random_sense (bool): If True for non-ambiguous lemma and pos tags
@@ -213,7 +213,7 @@ def get_negative_wordnet_sense_ids(
 
     positive_sense_id = sense_id
 
-    negative_sense_ids_to_ignore = set([positive_sense_id])
+    negative_sense_ids_to_ignore = set(positive_sense_id)
     negative_sense_ids = get_all_senses(
         word_net_lexicon, lemma, pos_tag, senses_to_ignore=negative_sense_ids_to_ignore
     )

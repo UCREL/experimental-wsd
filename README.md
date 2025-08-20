@@ -135,3 +135,27 @@ This has come from [Pasini et al. 2021](https://ojs.aaai.org/index.php/AAAI/arti
 ### Word Sense Linking (WSL) Bejgu et al. 2024
 
 Requires permission to access this dataset, but it is still free, you have to request permission through HuggingFace at the dataset's [data page](https://huggingface.co/datasets/Babelscape/wsl). 
+
+
+## WSD Training
+
+
+To get a predicted good Learning Rate ([using a Learning Rate Finder from Pytorch Lightning](https://lightning.ai/docs/pytorch/stable/api/lightning.pytorch.tuner.tuning.Tuner.html#lightning.pytorch.tuner.tuning.Tuner.lr_find)) and a recommended maximum batch size:
+
+``` bash
+uv run training_runs/semantic_similarity/get_token_similarity_variables_negatives_lr_batch_sizes.py --config training_runs/semantic_similarity/variable_negatives_configs/base_config.yaml
+```
+Take the values that come out of this are a very rough guide, e.g. with the batch size it would probably be best to choose a value 2 times smaller, e.g. 64 if it recommends 128. For the learning rate it is best to use it as a guide and go for a learning rate similar too or identical too a learning rate in a paper that is training a model similar to yours, this guide produced will mainly tell you if it is similar to other learning rate scores which I think is good.
+
+``` bash
+uv run $(pwd)/training_runs/semantic_similarity/train_and_evaluate_token_similarity_variables_negatives.py fit --config $(pwd)/training_runs/semantic_similarity/variable_negatives_configs/base_config.yaml --config $(pwd)/training_runs/semantic_similarity/variable_negatives_configs/jhu_clsp_ettin_encoder_17m.yaml
+```
+
+
+``` bash
+bash slurm_runs/semantic_similarity/variable_negatives/deberta.sh --config $(pwd)/training_runs/semantic_similarity/variable_negatives_configs/jhu_clsp_ettin_encoder_17m.yaml
+```
+
+``` bash
+srun python 
+```

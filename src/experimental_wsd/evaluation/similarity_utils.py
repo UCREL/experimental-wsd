@@ -1,11 +1,7 @@
-"""
-Reference:
-https://github.com/SapienzaNLP/wsd-hard-benchmark/blob/main/evaluation/evaluate_macro_F1.py
-"""
-
-from argparse import ArgumentParser
+import logging
 from collections import defaultdict
 
+logger = logging.getLogger(__name__)
 
 def load_keys(path):
     keys = {}
@@ -25,7 +21,7 @@ def load_keys(path):
     return keys
 
 
-def evaluate(gold, pred, eval_keys=None, strict=False):
+def evaluate_macro_f1(gold, pred, eval_keys=None, strict=False):
     tp = defaultdict(lambda: 0.)
     fp = defaultdict(lambda: 0.)
     fn = defaultdict(lambda: 0.)
@@ -87,50 +83,48 @@ def evaluate(gold, pred, eval_keys=None, strict=False):
     avg_p /= total
     avg_r /= total
     avg_f1 /= total
+
+    avg_p_percentage = avg_p * 100
+    avg_r_percentage = avg_p * 100
+    avg_f1_percentage = avg_p * 100
+
+    logger.info(f'Macro Precision = {avg_p_percentage:.2f}%')
+    logger.info(f'Macro Recall    = {avg_r_percentage:.2f}%')
+    logger.info(f'Macro F1 score  = {avg_f1_percentage:.2f}%')
+
+    return avg_f1
+
+def evaluate_micro_f1(gold, pred, eval_keys=None):
+    tp, fp, fn = 0, 0, 0
+
+    for instance_id in gold:
+        if eval_keys and instance_id not in eval_keys:
+            continue
+
+        if instance_id in pred:
+            correct = False
+
+            for key in pred[instance_id]:
+                if key in gold[instance_id]:
+                    correct = True
+            
+            if correct:
+                tp += 1
+            else:
+                for key in pred[instance_id]:
+                    fp += 1
+                fn += 1
+        else:
+            fn += 1
     
-    print('Macro Precision =', '{:0.2f}'.format(100. * avg_p))
-    print('Macro Recall    =', '{:0.2f}'.format(100. * avg_r))
-    print('Macro F1 score  =', '{:0.2f}'.format(100. * avg_f1))
+    precision = tp / (tp + fp) if tp + fp != 0 else 0
+    recall = tp / (tp + fn) if tp + fn != 0 else 0
+    f1 = 2 * (precision * recall) / (precision + recall) if precision + recall != 0 else 0
 
-
-if __name__ == '__main__':
-    parser = ArgumentParser()
-
-    parser.add_argument(
-        '--gold_path',
-        type=str,
-        required=True,
-        help='Path to the gold keys.'
-    )
-    parser.add_argument(
-        '--pred_path',
-        type=str,
-        required=True,
-        help='Path to the predicted keys.'
-    )
-    parser.add_argument(
-        '--key_subset_path',
-        type=str,
-        required=False,
-        help='Path to a regular key file.\n The evaluation script will consider only those keys appearing in this file.'
-    )
-    parser.add_argument(
-        '--strict',
-        action='store_true',
-        help='Computes a strict macro F1 score in which the system is required to guess every gold sense when an instance is tagged with multiple gold senses',
-    )
-
-    args = parser.parse_args()
-    gold_path: str = args.gold_path
-    pred_path: str = args.pred_path
-    key_subset_path: str = args.key_subset_path
-    strict: bool = args.strict
-
-    gold_keys = load_keys(gold_path)
-    pred_keys = load_keys(pred_path)
-
-    if not key_subset_path:
-        evaluate(gold_keys, pred_keys, strict=strict)
-    else:
-        eval_keys = load_keys(key_subset_path)
-        evaluate(gold_keys, pred_keys, eval_keys=eval_keys, strict=strict)
+    precision_percentage = 100 * precision
+    recall_percentage = 100 * recall
+    f1_percentage = 100 * f1
+    logger.info(f'Precision   = {precision_percentage:.2f}% [{tp}/{tp + fp}]')
+    logger.info(f'Recall      = {recall_percentage:.2f}% [{tp}/{tp + fn}]')
+    logger.info(f'F1 score    = {f1_percentage:.2f}%')
+    return f1

@@ -133,10 +133,9 @@ def test_get_random_sense():
 def test_get_negative_wordnet_sense_ids(get_random_sense: bool):
     lemma = "be"
     pos_tag = "v"
-    sense_id = "omw-en-be-02603699-v"
+    sense_id = ["omw-en-be-02603699-v", "omw-en-be-02604760-v"]
 
     expected_negative_verb_senses = [
-        "omw-en-be-02604760-v",
         "omw-en-be-02616386-v",
         "omw-en-be-02655135-v",
         "omw-en-be-02749904-v",
@@ -160,7 +159,6 @@ def test_get_negative_wordnet_sense_ids(get_random_sense: bool):
 
     expected_negative_senses = [
         "omw-en-Be-14631295-n",
-        "omw-en-be-02604760-v",
         "omw-en-be-02616386-v",
         "omw-en-be-02655135-v",
         "omw-en-be-02749904-v",
@@ -183,7 +181,7 @@ def test_get_negative_wordnet_sense_ids(get_random_sense: bool):
         get_random_sense=get_random_sense,
     )
 
-    laptop_sense_id = "omw-en-laptop-03642806-n"
+    laptop_sense_id = ["omw-en-laptop-03642806-n"]
     lemma = "laptop"
     pos_tag = "n"
 

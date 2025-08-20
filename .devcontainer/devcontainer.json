@@ -9,7 +9,7 @@
 		"dockerfile": "Dockerfile",
 		"context": ".."
 	},
-	"runArgs": [ "--gpus", "all" ],
+	"runArgs": [ "--gpus", "all", "--shm-size", "4g" ],
 	"customizations": {
 		// Configure properties specific to VS Code.
 		"vscode": {

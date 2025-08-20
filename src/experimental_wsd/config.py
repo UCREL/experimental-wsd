@@ -242,3 +242,4 @@ DATA_PROCESSING_DIR = Path(
         Path(Path.home(), ".cache", "experimental_wsd"),
     )
 )
+DATA_PROCESSING_DIR.mkdir(exist_ok=True)

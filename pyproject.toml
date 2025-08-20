@@ -19,9 +19,11 @@ dependencies = [
     "transformers[sentencepiece]>=4.53.2",
     "en-core-web-trf",
     "spacy>=3.8.7",
-    "lightning>=2.5.2",
+    "lightning[pytorch-extra]==2.5.3",
     "torchmetrics>=1.7.4",
     "triton>=3.3.1",
+    "pyyaml>=6.0.2",
+    "omegaconf>=2.3.0",
 ]
 
 [tool.uv.sources]
@@ -60,6 +62,7 @@ project-excludes = ["**/*venv/**/*"]
 dev = [
     "pyrefly>=0.24.0",
     "pytest>=8.4.1",
+    "pytest-repeat>=0.9.4",
     "pytest-rerunfailures>=15.1",
     "ruff>=0.12.3",
 ]

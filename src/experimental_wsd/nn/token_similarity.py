@@ -1,20 +1,28 @@
 import inspect
 import logging
 from collections import OrderedDict
+import math
 
 import lightning as L
 import torch
-from torchmetrics.classification import BinaryAccuracy, BinaryF1Score
+from torchmetrics.classification import BinaryAccuracy
 from transformers import AutoModel
-from transformers.modeling_outputs import BaseModelOutputWithPoolingAndCrossAttentions
+from transformers.modeling_outputs import BaseModelOutput
 
 from experimental_wsd.nn.scalar_mix import ScalarMix
-from experimental_wsd.nn.utils import tiny_value_of_dtype
+from experimental_wsd.nn.utils import tiny_value_of_dtype, get_linear_schedule_with_warmup
 
 logger = logging.getLogger(__name__)
 
 
 class TokenSimilarityVariableNegatives(L.LightningModule):
+
+    def get_total_number_steps(self) -> int:
+        batch_size_step = self.trainer.datamodule.batch_size * self.trainer.accumulate_grad_batches
+        number_training_samples = len(self.trainer.datamodule.train)
+        total_number_training_samples = number_training_samples * self.trainer.max_epochs
+        return math.ceil(total_number_training_samples / batch_size_step)
+
     @staticmethod
     def _get_base_model(base_model_name: str) -> AutoModel:
         """
@@ -27,16 +35,41 @@ class TokenSimilarityVariableNegatives(L.LightningModule):
         if "add_pooling_layer" in inspect.getfullargspec(base_model_type.__init__).args:
             return AutoModel.from_pretrained(base_model_name, add_pooling_layer=False)
         return base_model
+    
+    def configure_optimizers(self):
+        optimizer = torch.optim.AdamW(self.parameters(),
+                                      lr=self.learning_rate,
+                                      weight_decay=self.weight_decay)
+        total_number_steps = self.get_total_number_steps()
+        total_epoch_steps = total_number_steps / self.trainer.max_epochs
+        warm_up_steps = math.ceil(total_number_steps * self.fraction_of_warm_up_steps)
+        logger.info(f"Total number of training steps: {total_number_steps}")
+        logger.info(f"Number steps per epoch: {total_epoch_steps}")
+        logger.info(f"Total number warmup steps: {warm_up_steps}")
+        if self.use_scheduler:
+            linear_warmup_with_decay = get_linear_schedule_with_warmup(optimizer, warm_up_steps, total_number_steps)
+            return [optimizer], [{"scheduler": linear_warmup_with_decay,
+                                  "interval": "step",
+                                  "frequency": 1}]
+        else:
+            return optimizer
+    
 
     def __init__(
         self,
         base_model_name: str,
         freeze_base_model: bool,
         number_transformer_encoder_layers: int,
+        add_scalar_mixer: bool = True,
         scalar_mix_layer_norm: bool = True,
         transformer_encoder_hidden_dim: int = 512,
         transformer_encoder_num_heads: int = 8,
         batch_first: bool = True,
+        learning_rate: float = 2e-5,
+        weight_decay: float = 1e-2,
+        use_scheduler: bool = True,
+        fraction_of_warm_up_steps: float = 0.1,
+        scheduler_frequency: int = 1,
     ) -> None:
         """
         Args:
@@ -53,6 +86,11 @@ class TokenSimilarityVariableNegatives(L.LightningModule):
         """
 
         super().__init__()
+        self.learning_rate = learning_rate
+        self.weight_decay = weight_decay
+        self.use_scheduler = use_scheduler
+        self.scheduler_frequency = scheduler_frequency
+        self.fraction_of_warm_up_steps = fraction_of_warm_up_steps
         self.base_model_name = base_model_name
         self.base_model = self._get_base_model(self.base_model_name)
         self.base_model_hidden_size = self.base_model.config.hidden_size
@@ -73,14 +111,17 @@ class TokenSimilarityVariableNegatives(L.LightningModule):
                 base_model_parameter.requires_grad = False
         else:
             self.base_model.train(True)
+            logger.info("Training base model parameters")
             for base_model_parameter in self.base_model.parameters():
                 base_model_parameter.requires_grad = True
 
+        self.scalar_mix = add_scalar_mixer
         self.scalar_mix_layer_norm = scalar_mix_layer_norm
-        self.scalar_mix = ScalarMix(
-            self.base_model_number_hidden_layers,
-            do_layer_norm=self.scalar_mix_layer_norm,
-        )
+        if add_scalar_mixer:
+            self.scalar_mix = ScalarMix(
+                self.base_model_number_hidden_layers,
+                do_layer_norm=self.scalar_mix_layer_norm,
+            )
 
         # Optional list of layers to further encode the tokens after embedding
         # from the base transformer model.
@@ -131,12 +172,13 @@ class TokenSimilarityVariableNegatives(L.LightningModule):
             weight=None, reduction="mean", ignore_index=-100
         )
 
+        # This allows for more than one metric if we want more than one metric
         split_names = ["train", "validation", "test"]
-        standard_metric_kwargs = {"ignore_index": -100, "multidim_average": "global"}
-        self.metric_names = ["accuracy", "micro_f1"]
+        standard_metric_kwargs = {"ignore_index": -100,
+                                  "multidim_average": "global"}
+        self.metric_names = ["accuracy"]
         all_metric_class_args = [
-            (BinaryAccuracy, standard_metric_kwargs),
-            (BinaryF1Score, standard_metric_kwargs),
+            (BinaryAccuracy, standard_metric_kwargs)
         ]
         for split_name in split_names:
             for metric_name, metric_class_args in zip(
@@ -170,7 +212,7 @@ class TokenSimilarityVariableNegatives(L.LightningModule):
                 Shape (Batch, Sequence Length, Embedding Dimension)
         """
 
-        base_model_output: BaseModelOutputWithPoolingAndCrossAttentions = (
+        base_model_output: BaseModelOutput = (
             self.base_model(
                 token_input_ids, token_attention_mask, output_hidden_states=True
             )
@@ -178,11 +220,14 @@ class TokenSimilarityVariableNegatives(L.LightningModule):
 
         # self.base_model_number_hidden_layers of hidden layers of
         # (BATCH, SEQUENCE, self.base_model_hidden_size)
-        base_model_embedding_layers = base_model_output.hidden_states
+        
         # (BATCH, SEQUENCE, self.base_model_hidden_size)
-        token_model_embedding = self.scalar_mix(
-            base_model_embedding_layers, token_attention_mask
-        )
+        token_model_embedding = base_model_output.last_hidden_state
+        if self.scalar_mix:
+            base_model_hidden_layers = base_model_output.hidden_states
+            token_model_embedding = self.scalar_mix(
+                base_model_hidden_layers, token_attention_mask
+            )
 
         # Further token encoding through the token model layers
         if self.token_model_layers:
@@ -257,192 +302,119 @@ class TokenSimilarityVariableNegatives(L.LightningModule):
 
     def forward(
         self,
-        positive_input_ids: torch.Tensor,
-        positive_attention_mask: torch.Tensor,
-        negative_input_ids: torch.Tensor,
-        negative_attention_mask: torch.Tensor,
         text_input_ids: torch.Tensor,
         text_attention_mask: torch.Tensor,
         text_word_ids_mask: torch.Tensor,
-        random_label_reindexing: torch.Tensor | None = None,
+        label_definitions_input_ids: torch.Tensor,
+        label_definitions_attention_mask: torch.Tensor,
     ) -> torch.Tensor:
         """
 
         B represents the batch size. This is the number of text sequences.
-        M represents the largest number of positive samples within one text
-        sequence for the entire batch.
-        N represents the largest number of negative samples for a positive sample
-        within the batch of sequences (B).
+        S represents the largest number of similarity sentences within one text
+            sequence within the batch.
         T represents the largest token length for the text sample.
-        PT represents the largest token length for the positive text samples.
-        NT represents the largest token length for the negative text samples.
-
+        ST represents the largest token length for the label definitions sentences.
+        
         Args:
-            positive_input_ids (torch.Tensor): Tokenized positive text sample
-                for a token (MWE). torch.Long Shape (B, M, PT).
-            positive_attention_mask (torch.Tensor): 1 or 0 attention mask for the
-                positive text samples. torch.Long tensor. 1 represents a token to
-                attend to, 0 a token to ignore. Shape (B, M, PT).
-            negative_input_ids (torch.Tensor): Tokenized negative text samples
-                for a token (MWE). torch.Long Shape (B, M, N, NT).
-            negative_attention_mask (torch.Tensor): 1 or 0 attention mask for the
-                negative text samples. torch.Long tensor. 1 represents a token to
-                attend to, 0 a token to ignore. Shape (B, M, N, NT).
             text_input_ids (torch.Tensor): Tokenized text sample
-                which contains all of the tokens whereby some will have positive
-                and negative samples which the model learns from.
+                which contains all of the tokens a single set of tokens will be 
+                encoded and matched against the label definitions to determine 
+                which definition is the most similar.
                 torch.Long Shape (B, T).
             text_attention_mask (torch.Tensor): 1 or 0 attention mask for the
                 text samples. torch.Long tensor. 1 represents a token to
                 attend to, 0 a token to ignore. Shape (B, T).
-            text_word_ids_mask (torch.Tensor): A token mask for each token that
-                has a positive and negative samples to learn from. torch.Long.
-                Shape (B, M, T).
+            text_word_ids_mask (torch.Tensor): A token mask for the 
+                single set of tokens used to average the encoded text inputs. 
+                torch.Long. Shape (B, T).
+            label_definitions_input_ids (torch.Tensor): The input ids for the 
+                sentences to match the token encoding against to determine which 
+                is the most similar. torch.Long. Shape (B, S, ST).
+            label_definitions_attention_mask (torch.Tensor): The attention 
+                mask (1 or 0) for the `label_definitions_input_ids`. torch.Long. 
+                Shape (B, S, ST)
+            
         Returns:
-            torch.Tensor: A floating point tensor of shape (B, M, 1 + N).
+            torch.Tensor: A floating point tensor of shape (B, S).
 
 
         This type checking library might be useful in the future:
         https://docs.kidger.site/jaxtyping/
         """
 
-        BATCH_SIZE = text_input_ids.shape[0]
-        M = positive_input_ids.shape[1]
-        PT = positive_input_ids.shape[2]
-        N = negative_input_ids.shape[2]
-        NT = negative_input_ids.shape[3]
+        BATCH_SIZE, T = text_input_ids.shape
+        _, S, ST = label_definitions_input_ids.shape
 
-        # Encoding the Positive text sequences
-        # Need to reshape the positive text sequences so that they can be
-        # processed by the token encoding model/layers
-        positive_input_ids_encoding = positive_input_ids.view(-1, PT)
-        positive_attention_mask_encoding = positive_attention_mask.view(-1, PT)
-        positive_token_embedding = self._token_encoding(
-            positive_input_ids_encoding, positive_attention_mask_encoding
+        # Encoding the label definition sequences, these need to be reshaped 
+        # so that they can be processed by the token encoding model/layers
+        definition_input_ids_encoding = label_definitions_input_ids.view(-1, ST)
+        definition_attention_mask_encoding = label_definitions_attention_mask.view(-1, ST)
+        definition_token_embedding = self._token_encoding(
+            definition_input_ids_encoding, definition_attention_mask_encoding
         )
-        average_positive_token_embeddings = self._average_token_embedding_pooling(
-            positive_token_embedding, positive_attention_mask_encoding
+        average_definition_token_embeddings = self._average_token_embedding_pooling(
+            definition_token_embedding, definition_attention_mask_encoding
         )
         # View the embeddings back to shape:
-        # (Batch, M, Embedding Dimension)
-        average_positive_token_embeddings = average_positive_token_embeddings.view(
-            BATCH_SIZE, M, -1
+        # (Batch, S, Embedding Dimension)
+        average_definition_token_embeddings = average_definition_token_embeddings.view(
+            BATCH_SIZE, S, -1
         )
-
-        # Encoding the Negative text sequences
-        negative_input_ids_encoding = negative_input_ids.view(-1, NT)
-        negative_attention_mask_encoding = negative_attention_mask.view(-1, NT)
-        negative_token_embedding = self._token_encoding(
-            negative_input_ids_encoding, negative_attention_mask_encoding
-        )
-        average_negative_token_embeddings = self._average_token_embedding_pooling(
-            negative_token_embedding, negative_attention_mask_encoding
-        )
-        # View the embeddings back to shape:
-        # (Batch, M, N, Embedding Dimension)
-        average_negative_token_embeddings = average_negative_token_embeddings.view(
-            BATCH_SIZE, M, N, -1
-        )
-
-        # Combine the positive and negative embeddings, so that the positive embeddings
-        # Are always the first embedding in the sequence
-        average_positive_token_embeddings = average_positive_token_embeddings.unsqueeze(
-            -2
-        )
-        # Shape (Batch, M, N+1, Dimension)
-        average_positive_negative_embeddings = torch.cat(
-            (average_positive_token_embeddings, average_negative_token_embeddings),
-            dim=-2,
-        )
-        if random_label_reindexing is not None:
-            average_positive_negative_embeddings = average_positive_negative_embeddings[
-                :, :, random_label_reindexing, :
-            ]
 
         # Encoding the text sequence
+        # Shape (B, D)
         text_encoding = self._token_encoding(text_input_ids, text_attention_mask)
         # Expanded so that we have a text embedding per positive sample
         # Current Shape (Batch, Sequence Length, Dimension)
         # New Shape (B, M, T, D)
-        expanded_text_encoding = text_encoding.unsqueeze(1).expand(-1, M, -1, -1)
-        # Shape (B, M, D)
-        average_expanded_text_encoding = self._average_token_embedding_pooling(
-            expanded_text_encoding, text_word_ids_mask
+        #expanded_text_encoding = text_encoding.unsqueeze(1).expand(-1, S, -1, -1)
+        # Shape (B, D)
+        average_text_encoding = self._average_token_embedding_pooling(
+            text_encoding, text_word_ids_mask
         )
-        # Shape (B, M, D, 1)
-        average_expanded_text_encoding = average_expanded_text_encoding.unsqueeze(-1)
-        # Generate the similarity score through dot product.
-        # Shape (B, M, N + 1, 1)
-        similarity_score = torch.matmul(
-            average_positive_negative_embeddings, average_expanded_text_encoding
-        )
-        # Shape (B, M, N + 1)
-        similarity_score = similarity_score.squeeze(-1)
+        # Expand the text encoding so that we can get token similarity for each 
+        # label definition
+        expanded_average_text_encoding = average_text_encoding.unsqueeze(-1)
+        expanded_similarity_score = torch.matmul(average_definition_token_embeddings, expanded_average_text_encoding)
+        similarity_score = expanded_similarity_score.squeeze(-1)
         return similarity_score
 
-    def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(self.parameters(), lr=1e-3, weight_decay=0.01)
-        return optimizer
+    
 
     def _forward_with_loss_and_metric(
         self, batch: dict[str, torch.Tensor], split: str, batch_idx: int
     ) -> dict[str, torch.Tensor]:
-        # Float (Batch, M, N + 1)
-        number_of_possible_classes = batch["negative_attention_mask"].shape[-2] + 1
-        # Long (N + 1)
-        random_label_reindexing = torch.randperm(number_of_possible_classes).to(
-            self.device
-        )
 
         logits = self(
-            batch["positive_input_ids"],
-            batch["positive_attention_mask"],
-            batch["negative_input_ids"],
-            batch["negative_attention_mask"],
             batch["text_input_ids"],
             batch["text_attention_mask"],
             batch["text_word_ids_mask"],
-            random_label_reindexing=random_label_reindexing,
+            batch["label_definitions_input_ids"],
+            batch["label_definitions_attention_mask"],
         )
-        # This is in essence N + 1
-        number_of_negative_samples_with_positive = logits.shape[-1]
-        # Float (Batch * M, N + 1)
-        logits_compressed = logits.view(-1, number_of_negative_samples_with_positive)
-        # Shape (Batch, M) Should all be 0's as this is the correct index, except
-        # for samples that should be ignored, they will contain the `label_pad_id`
-        # which is likely to be -100
-        labels = batch["labels"]
-        correct_index = (random_label_reindexing == 0).nonzero().item()
-        # labels that are correct are always zero therefore need to replace 0
-        # values with correct index value.
-
-        labels[labels == 0] = correct_index
-
-        # For the loss the labels need to be of shape (Batch * M)
-        compressed_labels = labels.view(-1)
-        loss = self.loss_fn(logits_compressed, compressed_labels)
-
-        number_labels = (compressed_labels != -100).sum()
-
-        # Correct index is always correct_index, shape (Batch * M)
-        pred_labels = torch.argmax(logits_compressed, dim=-1)
-        pred_labels[pred_labels != correct_index] = 0
-        pred_labels[pred_labels == correct_index] = 1
-
-        true_labels = compressed_labels.clone()
-        true_labels[true_labels == correct_index] = 1
+        
+        labels = batch["label_ids"]
+        loss = self.loss_fn(logits, labels)
+        
+        
+        pred_labels = torch.argmax(logits, dim=-1)
+        metric_pred_labels = torch.zeros_like(labels)
+        metric_pred_labels[pred_labels == labels] = 1
+        metric_labels = torch.ones_like(labels)
 
         for metric_name in self.metric_names:
             metric = getattr(self, f"{split}_{metric_name}")
-            metric(pred_labels, true_labels)
+            metric(metric_pred_labels, metric_labels)
             self.log(
                 f"{split}_{metric_name}",
                 metric,
                 on_epoch=True,
-                on_step=True,
+                on_step=False,
                 prog_bar=True,
             )
 
+        number_labels = labels.shape[0]
         self.log(
             f"{split}_loss",
             loss,

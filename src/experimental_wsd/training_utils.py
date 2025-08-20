@@ -263,6 +263,218 @@ class AscendingTokenNegativeExamplesBatchSampler(Sampler[list[int]]):
             batch_index_chunk = batch_index_chunks[index_of_batch_index_chunks]
             yield batch_index_chunk.tolist()
 
+class DescendingTokenSimilarityBatchSampler(Sampler[list[int]]):
+    """
+    A sampler that generates batch indexes in descending order of number of
+    similarity sentences that a token has to match with, of which 1 sentence 
+    is expected to be the positive matched sentence.
+    """
+
+    def __init__(
+        self,
+        data: list[dict[str, Any]],
+        batch_size: int,
+        similarity_sentence_key: str,
+        random: bool = True,
+        with_replacement: bool = False,
+    ) -> None:
+        """
+        Args:
+            data (list[dict[str, Any]]): The data to batch. The outer list represents
+                the number of samples in the dataset. The inner dictionary represents
+                the data, e.g. `positive_label_input_ids`, `negative_label_input_ids`, etc.
+            batch_size (int): The batch size.
+            similarity_sentence_key (str): The key that represents the 
+                sentences that the token has to be matched within. This key 
+                should contain a list of a list of token IDs.
+            random (bool): If True then the batches with similar sizes will be
+                yielded in random order rather than the ascending order.
+                This is useful when you want to have similar sized batches but in random
+                order. Default True.
+            with_replacement (bool): When `random` is `True` then this sets the
+                `replacement` argument. Default False.
+        """
+        self.data = data
+        self.batch_size = batch_size
+        self.similarity_sentence_key = similarity_sentence_key
+        self.random = random
+        self.with_replacement = with_replacement
+
+    def __len__(self) -> int:
+        return (len(self.data) + self.batch_size - 1) // self.batch_size
+
+    def __iter__(self) -> Iterator[list[int]]:
+        sizes = []
+        for sequence in self.data:
+            number_similarity_sentences = len(sequence[self.similarity_sentence_key])
+            sizes.append(number_similarity_sentences)
+        sizes = torch.tensor(sizes)
+        number_batches = len(self)
+        batch_index_chunks = list(torch.chunk(torch.argsort(sizes, descending=True), number_batches))
+        indexes_of_batch_index_chunks = torch.arange(
+            0, number_batches, dtype=torch.float
+        )
+        if self.random:
+            random_indexes_of_batch_index_chunks = torch.multinomial(
+                indexes_of_batch_index_chunks,
+                number_batches,
+                replacement=self.with_replacement,
+            )
+            indexes_of_batch_index_chunks = random_indexes_of_batch_index_chunks
+        else:
+            # Indexes have to be of dtype long and not float, hence the conversion.
+            indexes_of_batch_index_chunks = indexes_of_batch_index_chunks.to(
+                dtype=torch.long
+            )
+
+        for index_of_batch_index_chunks in indexes_of_batch_index_chunks:
+            batch_index_chunk = batch_index_chunks[index_of_batch_index_chunks]
+            yield batch_index_chunk.tolist()
+
+
+def collate_variable_token_similarity_dataset(
+    tokenizer: PreTrainedTokenizerFast,
+    text_input_ids: str = "text_input_ids",
+    text_attention_mask = "text_attention_mask",
+    text_word_ids_mask = "text_word_ids_mask",
+    similarity_sentence_input_ids = "label_definitions_input_ids",
+    similarity_sentence_attention_mask = "label_definitions_attention_mask",
+    label_key: str = "label_ids",
+    attention_pad_id: int = 0,
+        
+) -> Callable[[list[dict[str, Any]]], dict[str, torch.Tensor]]:
+    """
+    This generates a function that converts a batch, 1 or more samples, of
+    token level semantic similarity data whereby a token/MWE has a variable number 
+    of semantically similar sentences of which one sentence is the correct 
+    sentence, this correct sentence ID should be expressed via the label_ids 
+    key value into a format suitable as input into a machine learning model 
+    for either training or inference.
+
+    The `attention_pad_id` is used for the following key-values:
+    * `text_attention_mask`
+    * `text_word_ids_mask`
+    * `similarity_sentence_attention_mask`
+    """
+
+    def _collate(data: list[dict[str, Any]]) -> dict[str, torch.Tensor]:
+        """
+        Expects a batch, 1 or more samples, of token level semantic similarity data 
+        and returns the data so that the dictionary keys are the same with each 
+        value as a torch tensor containing a batch of data whereby the 
+        dimensions are the same for the relevant keys;
+
+        B represents the batch size. This is the number of text sequences.
+        S represents the largest number of similarity sentences within one text
+        sequence.
+        T represents the largest token length for the text sample.
+        ST represents the largest token length for the similarity sentences.
+
+        `text` input attention IDs, and word ids mask keys will have a value
+        of a torch tensor with the following shape; (B, T)
+        `similarity_sentence` input and attention IDs keys will have a value
+        of a torch tensor with the following shape; (B, S, ST)
+        `label_key` tensor will have a value of a torch tensor with the following
+        shape; (B). The value of the tensor is an integer representing the
+        True sentence similarity label index.
+
+        The `label_key` will contain no padding.
+
+        The `similarity_sentence` input ids and attention masks could contain 
+        entire vectors of padding. This is due to the fact that not all text 
+        sequences will have the same number of similar sentences.
+
+        Args:
+            data (list[dict[str, Any]]): Data to transform.
+        Returns:
+            dict[str, torch.Tensor]: A dictionary that has the key names as in the
+                given argument dictionaries , but each value will be a torch tensor.
+        """
+
+        def _pad_sequence(
+            padding_token: int,
+            padding_side: str,
+            sequence: list[int],
+            expected_sequence_length: int,
+        ) -> torch.Tensor:
+            tensor_value = torch.tensor(sequence, dtype=torch.long)
+            pad_length = expected_sequence_length - tensor_value.size(-1)
+            if pad_length == 0:
+                return tensor_value
+            pad_tensor = torch.tensor([padding_token] * pad_length, dtype=torch.long)
+            if padding_side == "right":
+                tensor_value = torch.hstack((tensor_value, pad_tensor))
+            else:
+                tensor_value = torch.hstack((pad_tensor, tensor_value))
+            return tensor_value
+        
+        def _add_padding_lists(
+            sequence: list[Any], expected_sequence_length: int
+        ) -> list[Any]:
+            pad_length = expected_sequence_length - len(sequence)
+            copied_sequence = copy.deepcopy(sequence)
+            if pad_length == 0:
+                return copied_sequence
+            else:
+                for _ in range(pad_length):
+                    copied_sequence.append([])
+                return copied_sequence
+
+
+        padding_side = tokenizer.padding_side
+        text_padding_token = tokenizer.pad_token_id
+
+        max_text_length = 0 # T
+        max_number_similarity_sentences = 0 # S
+        max_similarity_sentence_length = 0 # ST
+        label_data = []
+
+        for sample in data:
+            text_length = len(sample[text_input_ids])
+            if max_text_length < text_length:
+                max_text_length = text_length
+            
+            similarity_sentences = sample[similarity_sentence_input_ids]
+            number_similarity_sentences = len(similarity_sentences)
+
+            if max_number_similarity_sentences < number_similarity_sentences:
+                max_number_similarity_sentences = number_similarity_sentences
+            for similarity_sentence in similarity_sentences:
+                similarity_sentence_length = len(similarity_sentence)
+                if max_similarity_sentence_length < similarity_sentence_length:
+                    max_similarity_sentence_length = similarity_sentence_length
+            
+            label_data.append(sample[label_key])
+
+        batched_data = defaultdict(list)
+        for sample in data:
+            for key, value in sample.items():
+                if key == text_input_ids:
+                    padded_text = _pad_sequence(text_padding_token, padding_side, value, max_text_length)
+                    batched_data[key].append(padded_text)
+                elif key == text_attention_mask or key == text_word_ids_mask:
+                    padded_text_masks = _pad_sequence(attention_pad_id, padding_side, value, max_text_length)
+                    batched_data[key].append(padded_text_masks)
+                elif key == similarity_sentence_input_ids or key == similarity_sentence_attention_mask:
+                    padded_similarity_sentence = _add_padding_lists(value, max_number_similarity_sentences)
+                    padding_value = text_padding_token
+                    if key == similarity_sentence_attention_mask:
+                        padding_value = attention_pad_id
+                    sample_padded_similarity_sentences = []
+                    for similarity_sentence_value in padded_similarity_sentence:
+                        padded_sentence_value = _pad_sequence(padding_value, padding_side, similarity_sentence_value, max_similarity_sentence_length)
+                        sample_padded_similarity_sentences.append(padded_sentence_value)
+                    stacked_sample_padded_similarity_sentences = torch.vstack(sample_padded_similarity_sentences).unsqueeze(0)
+                    batched_data[key].append(stacked_sample_padded_similarity_sentences)
+
+        batched_tensor_data: dict[str, torch.Tensor] = {}
+        for key, value in batched_data.items():
+            batched_tensor_data[key] = torch.vstack(value)
+        batched_tensor_data[label_key] = torch.tensor(label_data, dtype=torch.long)
+        return batched_tensor_data
+    
+    return _collate
+
 
 def collate_token_negative_examples_classification_dataset(
     tokenizer: PreTrainedTokenizerFast,
