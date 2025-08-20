@@ -1,8 +1,11 @@
 #!/bin/bash
-#SBATCH --partition=cpu-6h
-#SBATCH --output=tagging_log/out/deberta_semantic_similarity_variable_negatives_%A_%a.log
-#SBATCH --error=log/error/deberta_semantic_similarity_variable_negatives_%A_%a.log
+#SBATCH --partition=a5000-48h
+#SBATCH --output=log/out/deberta_v3_base_semantic_similarity_variable_negatives_%A_%a.log
+#SBATCH --error=log/error/deberta_v3_base_semantic_similarity_variable_negatives_%A_%a.log
+#SBATCH --cpus-per-task=12
+#SBATCH --gpus=1
 #SBATCH --array=0-3
+
 
 declare -A learning_rate_mapper
 learning_rate_mapper[0]="1e-5"

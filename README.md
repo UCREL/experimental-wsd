@@ -157,5 +157,5 @@ bash slurm_runs/semantic_similarity/variable_negatives/deberta.sh --config $(pwd
 ```
 
 ``` bash
-srun python 
+sbatch slurm_runs/semantic_similarity/variable_negatives/test_lr_batch_size.sh --config $(pwd)/training_runs/semantic_similarity/variable_negatives_configs/deberta_v3_base.yaml
 ```
