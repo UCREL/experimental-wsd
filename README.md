@@ -145,17 +145,89 @@ To get a predicted good Learning Rate ([using a Learning Rate Finder from Pytorc
 ``` bash
 uv run training_runs/semantic_similarity/get_token_similarity_variables_negatives_lr_batch_sizes.py --config training_runs/semantic_similarity/variable_negatives_configs/base_config.yaml
 ```
-Take the values that come out of this are a very rough guide, e.g. with the batch size it would probably be best to choose a value 2 times smaller, e.g. 64 if it recommends 128. For the learning rate it is best to use it as a guide and go for a learning rate similar too or identical too a learning rate in a paper that is training a model similar to yours, this guide produced will mainly tell you if it is similar to other learning rate scores which I think is good.
+Take the values that come out of this are a very rough guide, e.g. with the batch size it would probably be best to choose a value half the size, e.g. 64 if it recommends 128. For the learning rate it is best to use it as a guide and go for a learning rate similar too or identical too a learning rate in a paper that is training a model similar to yours, this guide produced will mainly tell you if it is similar to other learning rate scores which I think is good.
 
 ``` bash
 uv run $(pwd)/training_runs/semantic_similarity/train_and_evaluate_token_similarity_variables_negatives.py fit --config $(pwd)/training_runs/semantic_similarity/variable_negatives_configs/base_config.yaml --config $(pwd)/training_runs/semantic_similarity/variable_negatives_configs/jhu_clsp_ettin_encoder_17m.yaml
 ```
 
 
-``` bash
-bash slurm_runs/semantic_similarity/variable_negatives/deberta.sh --config $(pwd)/training_runs/semantic_similarity/variable_negatives_configs/jhu_clsp_ettin_encoder_17m.yaml
-```
+
+
+
+### Running on HEX
+
+#### Setup
+
+1. Git clone this repository
+2. Create a Python virtual environment: `python3 -m venv venv` and then enter the virtual environment `source venv/bin/activate`
+3. Change the `pyproject.toml` file so that the following two lines are removed `en-core-web-trf` and `en-core-web-trf = { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_trf-3.8.0/en_core_web_trf-3.8.0.tar.gz" }` as for some reason `pip` could not install this repository with those two lines in the file.
+4. Install the python packages `pip install -e .`
+5. Before downloading the required data change the script `./data/download_data.sh` so that it uses `python` rather than `uv run python` and then follow the standard instruction of `cd data && bash download_data.sh`
+
+#### Finding Learning Rate and Recommended Batch Size
+
+##### WSD Token Semantic Similarity with variable negatives
+
+This is an example using the DeBERTa V3 base model however it can be adjusted to any other base model, e.g. BERT, ModernBERT, etc by changing the `--config` file.
 
 ``` bash
 sbatch slurm_runs/semantic_similarity/variable_negatives/test_lr_batch_size.sh --config $(pwd)/training_runs/semantic_similarity/variable_negatives_configs/deberta_v3_base.yaml
+```
+
+This will then generate the following file `./log/error/semantic_similarity_variable_negatives_test_lr_batch_size.log` that will contain a suggested Learning Rate as well as the list of all learning rates tested with their associated loss scores in ascending order of loss value, e.g.
+
+``` bash
+INFO:root:LR: 3.630780547701014e-08    Loss: 15.414904287434045
+INFO:root:LR: 5.75439937337157e-07    Loss: 15.77297642139897
+INFO:root:LR: 1.0964781961431852e-07    Loss: 15.816144917654551
+INFO:root:LR: 8.317637711026709e-07    Loss: 15.953934407975186
+INFO:root:LR: 6.918309709189366e-07    Loss: 15.959775399719017
+INFO:root:LR: 6.3095734448019305e-06    Loss: 15.962526348079619
+INFO:root:LR: 4.786300923226383e-07    Loss: 16.01712950715485
+INFO:root:LR: 3.0199517204020163e-06    Loss: 16.14076463083797
+INFO:root:LR: 1.2022644346174132e-06    Loss: 16.175092202026857
+INFO:root:LR: 1e-06    Loss: 16.19031309975706
+INFO:root:LR: 5.248074602497728e-06    Loss: 16.28327231364075
+INFO:root:LR: 1.445439770745928e-06    Loss: 16.38478278176444
+INFO:root:LR: 1.7378008287493761e-06    Loss: 16.386512021698884
+INFO:root:LR: 2.089296130854039e-06    Loss: 16.42428246479376
+INFO:root:LR: 2.5118864315095797e-06    Loss: 16.559806156732773
+INFO:root:LR: 2.51188643150958e-08    Loss: 16.6148078646217
+INFO:root:LR: 3.630780547701014e-06    Loss: 16.628934864966823
+INFO:root:LR: 4.365158322401661e-06    Loss: 16.63886725934056
+INFO:root:LR: 3.019951720402016e-08    Loss: 17.10791306356275
+INFO:root:LR: 1.4454397707459274e-08    Loss: 17.30391533905722
+INFO:root:LR: 2.0892961308540398e-08    Loss: 18.898985447038516
+INFO:root:LR: 1e-08    Loss: 19.18319355357775
+INFO:root:Suggested LR: 7.585775750291837e-08, loss at this LR: 14.533493115188765
+```
+
+For the learning rate it is best to use it as a guide and go for a learning rate similar too or identical too a learning rate in a paper that is training a model similar to yours, this guide produced will mainly tell you if it is similar to other learning rate scores which I think is good.
+
+It will also state the largest batch size as well as the batch size it test up to:
+
+```bash
+`Trainer.fit` stopped: `max_steps=50` reached.
+Batch size 2 succeeded, trying batch size 4
+`Trainer.fit` stopped: `max_steps=50` reached.
+Batch size 4 succeeded, trying batch size 8
+`Trainer.fit` stopped: `max_steps=50` reached.
+Batch size 8 succeeded, trying batch size 16
+Batch size 16 failed, trying batch size 8
+Finished batch size finder, will continue with full run using batch size 8
+Restoring states from the checkpoint path at /mnt/nfs/homes/mooreap1/experimental-wsd/.scale_batch_size_ecc0c8e8-6ba5-426f-963f-e717de5a9ec6.ckpt
+Restored all states from the checkpoint at /mnt/nfs/homes/mooreap1/experimental-wsd/.scale_batch_size_ecc0c8e8-6ba5-426f-963f-e717de5a9ec6.ckpt
+INFO:root:Largest batch size: 8
+```
+
+Take the values that come out of this are a very rough guide, e.g. with the batch size it would probably be best to choose a value half the size, e.g. 4 if it recommends 8.
+
+#### Training Models
+
+##### WSD Token Semantic Similarity with variable negatives
+
+This is will train 4 DeBERTa V3 base models each with a different learning rate:
+``` bash
+sbatch slurm_runs/semantic_similarity/variable_negatives/deberta_v3_base.sh
 ```
