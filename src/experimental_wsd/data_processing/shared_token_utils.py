@@ -18,6 +18,115 @@ from experimental_wsd.wordnet_utils import (
     get_negative_wordnet_sense_ids,
     get_normalised_mwe_lemma_for_wordnet,
 )
+from experimental_wsd.data_processing import processed_usas_utils
+
+def usas_map_to_definitions(
+    data: dict[str, list[str] | list[list[str]]],
+    usas_mapper: dict[str, str]
+) -> dict[str, list[str] | list[list[str]]]:
+    """
+    """
+    usas_definitions = {"label_definitions": []}
+    usas_labels = data["usas_labels"]
+    for usas_label in usas_labels:
+        usas_definition = usas_mapper[usas_label]
+        usas_definitions["label_definitions"].append(usas_definition)
+    return usas_definitions
+
+
+def usas_join_positive_negative_labels(data: dict[str, Any], randomize: bool = True) -> dict[str, Any]:
+    usas_label = data["usas"]
+    negative_usas_labels = data["negative_usas"]
+    combined_labels = [usas_label, *negative_usas_labels]
+    label_dict = {
+        "usas_labels": combined_labels,
+        "label_ids": 0
+    }
+    if randomize:
+        shuffle_index = list(range(len(combined_labels)))
+        random_shuffle(shuffle_index)
+        tmp_combined_labels = []
+        for index, shuffled_index in enumerate(shuffle_index):
+            if shuffled_index == 0:
+                label_dict["label_ids"] = index
+            tmp_combined_labels.append(combined_labels[shuffled_index])
+        label_dict["usas_labels"] = tmp_combined_labels
+
+    return label_dict
+
+def usas_samples_to_single_sample(data: dict[str, Any]) -> dict[str, Any]:
+    """
+    """
+
+    exploded_data = {
+        key: [] for key in data
+    }
+    for batch_index, all_token_usas_tags in enumerate(data["usas"]):
+        for token_index, token_usas_tags in enumerate(all_token_usas_tags):
+            for usas_tag in token_usas_tags:
+                exploded_data["id"].append(data["id"][batch_index])
+                exploded_data["text"].append(data["text"][batch_index])
+                #exploded_data["tokens"].append(data["tokens"][batch_index][token_index])
+                exploded_data["usas_token_offsets"].append(data["usas_token_offsets"][batch_index][token_index])
+                exploded_data["usas"].append(usas_tag)
+                exploded_data["negative_usas"].append(data["negative_usas"][batch_index][token_index])
+    return exploded_data
+
+
+def map_negative_usas_labels(
+        mosaic_usas_sentence_instance: dict[str, Any],
+        positive_usas_key: str,
+        negative_usas_key: str,
+        usas_weighting: dict[str, float],
+        use_weights: bool
+) -> dict[str, str]:
+    """
+    A HuggingFace Dataset mapper function which should be ran in non-batch mode.
+    """
+    all_positive_usas_labels = mosaic_usas_sentence_instance[positive_usas_key]
+    
+
+    all_negative_usas_labels = [[] for _ in all_positive_usas_labels]
+    if negative_usas_key in mosaic_usas_sentence_instance:
+        all_negative_usas_labels = mosaic_usas_sentence_instance[negative_usas_key]
+
+    new_all_negative_usas_labels = []
+    for negative_token_usas_tags, positive_token_usas_tags in zip(all_negative_usas_labels, all_positive_usas_labels):
+        new_negative_usas_tag = processed_usas_utils.random_negative_usas_label(positive_token_usas_tags, negative_token_usas_tags, usas_weighting, use_weights)
+        new_all_negative_usas_labels.append([new_negative_usas_tag, *negative_token_usas_tags])
+
+    return {negative_usas_key: new_all_negative_usas_labels}
+
+
+def remove_duplicate_list_of_list_entries_while_maintaining_order(data: dict[str, Any], key: str) -> dict[str, Any]:
+    """
+    Given a dataset sample, it will de-duplicate the data that is associated with 
+    the given key. The data to de-duplicate should be a list of a list of Any hashable 
+    value, the de-duplicated version of this data is de-duplicated at the inner list 
+    level, e.g.
+
+    Input:
+    `key`: [[0,1,1,2,3], [1,2,3,3]]
+
+    Output:
+    `key`: [[0,1,2,3], [1,2,3]]
+
+    A HuggingFace Datasets mapper function which should be ran in non-batch mode.
+    """
+    all_token_usas_tags = data[key]
+    all_de_duplicated_usas_tags = []
+
+    for token_usas_tags in all_token_usas_tags:
+        unique_tags = set()
+        de_duplicated_tags = []
+        for usas_tag in token_usas_tags:
+            if usas_tag in unique_tags:
+                continue
+            de_duplicated_tags.append(usas_tag)
+            unique_tags.add(usas_tag)
+        all_de_duplicated_usas_tags.append(de_duplicated_tags)
+    return {key: all_de_duplicated_usas_tags}
+    
 
 
 def map_token_sense_labels(

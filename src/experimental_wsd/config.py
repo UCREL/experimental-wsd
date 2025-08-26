@@ -223,9 +223,34 @@ class RaganatoEnglishConfig(BaseModel):
             directory=Path(self.data_directory, "Training_Corpora", "SemCor+OMSTI")
         )
 
+class MosaicoCoreUSASConfig(BaseModel):
+
+    data_directory:DirectoryPath
+
+    computed_field
+    @property
+    def train(self) -> list[FilePath]:
+        train_file_paths = []
+        for index in range(8):
+            train_file_path = Path(self.data_directory, f"wikipedia_export.jsonl.{index}").resolve()
+            train_file_paths.append(train_file_path)
+        return train_file_paths
+
+    @computed_field
+    @property
+    def validation(self) -> FilePath:
+        return Path(self.data_directory, "wikipedia_export.jsonl.8").resolve()
+    
+    @computed_field
+    @property
+    def test(self) -> FilePath:
+        return Path(self.data_directory, "wikipedia_export.jsonl.9").resolve()
+
 
 MaruEnglish: MaruEnglishConfig | None = None
 RaganatoEnglish: RaganatoEnglishConfig | None = None
+MosaicoCoreUSAS: MosaicoCoreUSASConfig | None = None
+USASMapper: Path| None = None
 
 if os.environ.get("ENGLISH_MARU_HARD"):
     MaruEnglish = MaruEnglishConfig(data_directory=os.environ.get("ENGLISH_MARU_HARD"))
@@ -234,6 +259,14 @@ if os.environ.get("ENGLISH_RAGANATO"):
     RaganatoEnglish = RaganatoEnglishConfig(
         data_directory=os.environ.get("ENGLISH_RAGANATO")
     )
+
+if os.environ.get("MOSAICO_CORE_USAS"):
+    MosaicoCoreUSAS = MosaicoCoreUSASConfig(
+        data_directory=os.environ.get("MOSAICO_CORE_USAS")
+    )
+
+if os.environ.get("USAS_MAPPER"):
+    USASMapper = Path(os.environ.get("USAS_MAPPER"))
 
 # Used to set where the processed data should be stored.
 DATA_PROCESSING_DIR = Path(

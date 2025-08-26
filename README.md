@@ -136,6 +136,27 @@ This has come from [Pasini et al. 2021](https://ojs.aaai.org/index.php/AAAI/arti
 
 Requires permission to access this dataset, but it is still free, you have to request permission through HuggingFace at the dataset's [data page](https://huggingface.co/datasets/Babelscape/wsl). 
 
+### Mosaico Core USAS data
+
+We have tagged the [Mosaico Core English Wikipedia](https://aclanthology.org/2024.naacl-long.442.pdf) dataset with the CLAWS and English USAS taggers. The CLAWS tagger is a rule based tokenizer, POS, and sentence boundary detection tagger. The English USAS tagger is a rule based lemmatiser and semantic tagger, whereby the semantic tags come from the USAS tagset. The USAS tagger is the C version of the USAS tagger.
+
+This dataset contains 10 JSONL formatted files, of which we expect these files to be in the following folder:
+``` bash
+./data/mosaico_core_usas
+```
+
+Please add the absolute (not relative) path to this directory in the `./env` file like so:
+
+``` bash
+MOSAICO_CORE_USAS=/workspaces/experimental-wsd/data/mosaico_core_usas
+```
+
+Please add the absolute (not relative) path to the `usas_mapper.yaml` file which should be in the [./data folder](./data) in the `./env` file like so:
+
+``` bash
+USAS_MAPPER=/workspaces/experimental-wsd/data/usas_mapper.yaml
+```
+
 
 ## WSD Training
 
@@ -222,6 +243,23 @@ INFO:root:Largest batch size: 8
 ```
 
 Take the values that come out of this are a very rough guide, e.g. with the batch size it would probably be best to choose a value half the size, e.g. 4 if it recommends 8.
+
+#### Pre-Processing data
+
+Not all of the datasets are large enough to require a separate script for pre-processing the data but the ones listed below are, when pre-processing any of these datasets it is best to have a large compute node with many CPUs and 10's of GBs of RAM, the pre-processing scripts do not require a GPU.
+
+##### USAS Token Semantic Similarity with variable negatives
+
+This is an example of how to pre-process the data with the base model `jhu-clsp/ettin-encoder-17m`
+
+``` bash
+uv run python ./training_runs/usas_semantic_similarity/pre_process_dataset.py jhu-clsp/ettin-encoder-17m --num-cpus-pre-processing 15
+```
+
+``` bash
+srun -p cpu-48h python ./training_runs/usas_semantic_similarity/pre_process_dataset.py jhu-clsp/ettin-encoder-17m --num-cpus-pre-processing 5
+srun -p cpu-48h python ./training_runs/usas_semantic_similarity/pre_process_dataset.py FacebookAI/xlm-roberta-base --num-cpus-pre-processing 5
+```
 
 #### Training Models
 
