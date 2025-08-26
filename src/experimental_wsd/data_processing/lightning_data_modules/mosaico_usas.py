@@ -173,7 +173,7 @@ class VariableMosaicoUSASTraining(L.LightningDataModule):
                         batched=False,
                         num_proc=self.num_cpus_pre_processing,
                         fn_kwargs={"word_ids_key":"text_word_ids",
-                                   "token_offsets_key":"token_offsets",
+                                   "token_offsets_key":"usas_token_offsets",
                                    "word_id_mask_key":"text_word_ids_mask"})
         
         training_keys = [
