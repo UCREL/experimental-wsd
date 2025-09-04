@@ -4,8 +4,8 @@ trainer:
   strategy: auto
   devices: auto
   num_nodes: 1
-  precision: null
-  accumulate_grad_batches: 8
+  precision: 16
+  accumulate_grad_batches: 16
   logger:
     class_path: lightning.pytorch.loggers.CSVLogger
     init_args:

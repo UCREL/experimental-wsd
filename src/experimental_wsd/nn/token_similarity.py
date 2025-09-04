@@ -299,6 +299,82 @@ class TokenSimilarityVariableNegatives(L.LightningModule):
         # Float tensor, shape (..., Embedding Dimension)
         average_token_embeddings = masked_embedding_sum / number_token_vectors
         return average_token_embeddings
+    
+    def label_definition_encoding(
+        self,
+        label_definitions_input_ids: torch.Tensor,
+        label_definitions_attention_mask: torch.Tensor,
+        ) -> torch.Tensor:
+        
+        BATCH_SIZE, S, ST = label_definitions_input_ids.shape
+
+        # Encoding the label definition sequences, these need to be reshaped 
+        # so that they can be processed by the token encoding model/layers
+        definition_input_ids_encoding = label_definitions_input_ids.view(-1, ST)
+        definition_attention_mask_encoding = label_definitions_attention_mask.view(-1, ST)
+        definition_token_embedding = self._token_encoding(
+            definition_input_ids_encoding, definition_attention_mask_encoding
+        )
+        average_definition_token_embeddings = self._average_token_embedding_pooling(
+            definition_token_embedding, definition_attention_mask_encoding
+        )
+        # View the embeddings back to shape:
+        # (Batch, S, Embedding Dimension)
+        average_definition_token_embeddings = average_definition_token_embeddings.view(
+            BATCH_SIZE, S, -1
+        )
+        return average_definition_token_embeddings
+    
+    def text_encoding(self,
+                            text_input_ids: torch.Tensor,
+        text_attention_mask: torch.Tensor,
+        ) -> torch.Tensor:
+        # Encoding the text sequence
+        # Shape (B, D)
+        text_encoding = self._token_encoding(text_input_ids, text_attention_mask)
+        return text_encoding
+    
+    def token_encoding_using_text_encoding(self,
+                                           text_encoding: torch.Tensor,
+                                           text_word_ids_mask: torch.Tensor) -> torch.Tensor:
+        # Expanded so that we have a text embedding per positive sample
+        # Current Shape (Batch, Sequence Length, Dimension)
+        # New Shape (B, M, T, D)
+        #expanded_text_encoding = text_encoding.unsqueeze(1).expand(-1, S, -1, -1)
+        # Shape (B, D)
+        average_text_encoding = self._average_token_embedding_pooling(
+            text_encoding, text_word_ids_mask
+        )
+        return average_text_encoding
+    
+    def token_text_encoding(self,
+                            text_input_ids: torch.Tensor,
+        text_attention_mask: torch.Tensor,
+        text_word_ids_mask: torch.Tensor
+        ) -> torch.Tensor:
+        # Encoding the text sequence
+        # Shape (B, D)
+        text_encoding = self._token_encoding(text_input_ids, text_attention_mask)
+        # Expanded so that we have a text embedding per positive sample
+        # Current Shape (Batch, Sequence Length, Dimension)
+        # New Shape (B, M, T, D)
+        #expanded_text_encoding = text_encoding.unsqueeze(1).expand(-1, S, -1, -1)
+        # Shape (B, D)
+        average_text_encoding = self._average_token_embedding_pooling(
+            text_encoding, text_word_ids_mask
+        )
+        return average_text_encoding
+    
+    def token_label_similarity(self,
+                               label_definition_embedding: torch.Tensor,
+                               token_text_embedding: torch.Tensor) -> torch.Tensor:
+        # Expand the text encoding so that we can get token similarity for each 
+        # label definition
+        expanded_average_text_encoding = token_text_embedding.unsqueeze(-1)
+        expanded_similarity_score = torch.matmul(label_definition_embedding, expanded_average_text_encoding)
+        similarity_score = expanded_similarity_score.squeeze(-1)
+        return similarity_score
+        
 
     def forward(
         self,
@@ -342,42 +418,14 @@ class TokenSimilarityVariableNegatives(L.LightningModule):
         This type checking library might be useful in the future:
         https://docs.kidger.site/jaxtyping/
         """
+        average_definition_token_embeddings = self.label_definition_encoding(label_definitions_input_ids, label_definitions_attention_mask)
 
-        BATCH_SIZE, T = text_input_ids.shape
-        _, S, ST = label_definitions_input_ids.shape
+        average_text_encoding = self.token_text_encoding(text_input_ids,
+        text_attention_mask,
+        text_word_ids_mask)
 
-        # Encoding the label definition sequences, these need to be reshaped 
-        # so that they can be processed by the token encoding model/layers
-        definition_input_ids_encoding = label_definitions_input_ids.view(-1, ST)
-        definition_attention_mask_encoding = label_definitions_attention_mask.view(-1, ST)
-        definition_token_embedding = self._token_encoding(
-            definition_input_ids_encoding, definition_attention_mask_encoding
-        )
-        average_definition_token_embeddings = self._average_token_embedding_pooling(
-            definition_token_embedding, definition_attention_mask_encoding
-        )
-        # View the embeddings back to shape:
-        # (Batch, S, Embedding Dimension)
-        average_definition_token_embeddings = average_definition_token_embeddings.view(
-            BATCH_SIZE, S, -1
-        )
-
-        # Encoding the text sequence
-        # Shape (B, D)
-        text_encoding = self._token_encoding(text_input_ids, text_attention_mask)
-        # Expanded so that we have a text embedding per positive sample
-        # Current Shape (Batch, Sequence Length, Dimension)
-        # New Shape (B, M, T, D)
-        #expanded_text_encoding = text_encoding.unsqueeze(1).expand(-1, S, -1, -1)
-        # Shape (B, D)
-        average_text_encoding = self._average_token_embedding_pooling(
-            text_encoding, text_word_ids_mask
-        )
-        # Expand the text encoding so that we can get token similarity for each 
-        # label definition
-        expanded_average_text_encoding = average_text_encoding.unsqueeze(-1)
-        expanded_similarity_score = torch.matmul(average_definition_token_embeddings, expanded_average_text_encoding)
-        similarity_score = expanded_similarity_score.squeeze(-1)
+        similarity_score = self.token_label_similarity(average_definition_token_embeddings, average_text_encoding)
+        
         return similarity_score
 
     

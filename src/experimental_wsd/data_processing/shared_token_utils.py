@@ -692,6 +692,30 @@ def map_to_definitions(
 
     return sense_definitions
 
+def filter_sequences_too_long(
+        data: dict[str, list[str]],
+        key: str,
+        length: int
+) -> bool:
+    """
+    Returns False if the length of the value of the `key` from `data` is longer 
+    than or equal to the `length`.
+
+    HuggingFace dataset filter.
+
+    Args:
+        data (dict[str, list[str]]): The data that contains the `key` and it's 
+            value.
+        key (str): The key whole value cannot be as long or longer than `length`
+        length (int): The maximum length.
+    Returns:
+        bool: True if the key-value is less than `length` else False.
+    """
+
+    if len(data[key]) >= length:
+        return False
+    return True
+
 def tokenize_key(
     data: dict[str, list[str] | list[list[str]]],
     tokenizer: transformers.PreTrainedTokenizerFast,

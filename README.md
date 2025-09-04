@@ -253,13 +253,31 @@ Not all of the datasets are large enough to require a separate script for pre-pr
 This is an example of how to pre-process the data with the base model `jhu-clsp/ettin-encoder-17m`
 
 ``` bash
-uv run python ./training_runs/usas_semantic_similarity/pre_process_dataset.py jhu-clsp/ettin-encoder-17m --num-cpus-pre-processing 15
+uv run python ./training_runs/usas_semantic_similarity/pre_process_dataset.py jhu-clsp/ettin-encoder-17m usas_semantic_similarity_variable_nagative_jhu_clsp_ettin_encoder_17_m --num-cpus-pre-processing 15
+uv run python ./training_runs/usas_semantic_similarity/pre_process_dataset.py FacebookAI/xlm-roberta-base usas_semantic_similarity_variable_nagative_FacebookAI_xlm_roberta_base --num-cpus-pre-processing 15
 ```
 
 ``` bash
 srun -p cpu-48h python ./training_runs/usas_semantic_similarity/pre_process_dataset.py jhu-clsp/ettin-encoder-17m --num-cpus-pre-processing 5
 srun -p cpu-48h python ./training_runs/usas_semantic_similarity/pre_process_dataset.py FacebookAI/xlm-roberta-base --num-cpus-pre-processing 5
 ```
+
+``` bash
+uv run python ./training_runs/usas_semantic_similarity/train_and_evaluate_token_similarity_variables_negatives.py fit \
+--config ./training_runs/usas_semantic_similarity/variable_negatives_configs/base_config.yaml \
+--config ./training_runs/usas_semantic_similarity/variable_negatives_configs/jhu_clsp_ettin_encoder_17m.yaml --model.learning_rate 1e-5 --data.dataset_folder_name usas_semantic_similarity_variable_nagative_jhu_clsp_ettin_encoder_17_m
+```
+
+``` bash
+sbatch slurm_runs/semantic_similarity/usas_variable_negatives/xlmr_base.sh --model.learning_rate 1e-5 --data.dataset_folder_name usas_semantic_similarity_variable_nagative_FacebookAI_xlm_roberta_base
+```
+
+
+``` bash
+uv run python ./training_runs/usas_semantic_similarity/evaluate.py ./lightning_logs/usas_jhu_clsp_ettin_encoder_17m/version_14/checkpoints/last.ckpt
+uv run python ./training_runs/usas_semantic_similarity/evaluate.py ./lightning_logs/usas_jhu_clsp_ettin_encoder_17m/version_15/checkpoints/last.ckpt
+```
+
 
 #### Training Models
 

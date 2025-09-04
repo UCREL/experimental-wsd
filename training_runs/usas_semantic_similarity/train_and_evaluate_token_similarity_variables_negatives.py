@@ -4,6 +4,8 @@ import json
 import logging
 import statistics
 
+import torch
+
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -29,8 +31,9 @@ def model_cli() -> None:
         "gradient_clip_algorithm": "norm",
         "detect_anomaly": False,
         "max_epochs": 20,
-        "val_check_interval": 1/10
+        "val_check_interval": 1/5
     }
+    torch.set_float32_matmul_precision('high')
     cli = TokenSimilarityVariableNegativesCLI(
         model_class=TokenSimilarityVariableNegatives,
         datamodule_class=VariableMosaicoUSASTraining,

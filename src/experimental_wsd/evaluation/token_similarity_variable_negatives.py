@@ -85,4 +85,8 @@ def evaluate_on_wordnet_dataset(
     return micro_f1, macro_f1
 
 
+def evaluate_on_usas_dataset(model: TokenSimilarityVariableNegatives) -> None:
+    return None
+
+
 
