@@ -254,6 +254,7 @@ This is an example of how to pre-process the data with the base model `jhu-clsp/
 
 ``` bash
 uv run python ./training_runs/usas_semantic_similarity/pre_process_dataset.py jhu-clsp/ettin-encoder-17m usas_semantic_similarity_variable_nagative_jhu_clsp_ettin_encoder_17_m --num-cpus-pre-processing 15
+uv run python ./training_runs/usas_semantic_similarity/pre_process_dataset.py jhu-clsp/ettin-encoder-68m usas_semantic_similarity_variable_nagative_jhu_clsp_ettin_encoder_68m --num-cpus-pre-processing 15
 uv run python ./training_runs/usas_semantic_similarity/pre_process_dataset.py FacebookAI/xlm-roberta-base usas_semantic_similarity_variable_nagative_FacebookAI_xlm_roberta_base --num-cpus-pre-processing 15
 ```
 
@@ -269,6 +270,7 @@ uv run python ./training_runs/usas_semantic_similarity/train_and_evaluate_token_
 ```
 
 ``` bash
+sbatch slurm_runs/semantic_similarity/usas_variable_negatives/jhu_clsp_ettin_68m.sh --model.learning_rate 1e-5 --data.dataset_folder_name usas_semantic_similarity_variable_nagative_jhu_clsp_ettin_encoder_68m
 sbatch slurm_runs/semantic_similarity/usas_variable_negatives/xlmr_base.sh --model.learning_rate 1e-5 --data.dataset_folder_name usas_semantic_similarity_variable_nagative_FacebookAI_xlm_roberta_base
 ```
 

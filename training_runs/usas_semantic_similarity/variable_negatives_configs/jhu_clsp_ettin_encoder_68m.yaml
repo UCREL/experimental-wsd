@@ -1,0 +1,32 @@
+# lightning.pytorch==2.5.3
+trainer:
+  accelerator: auto
+  strategy: auto
+  devices: auto
+  num_nodes: 1
+  precision: bf16-mixed
+  accumulate_grad_batches: 4
+  logger:
+    class_path: lightning.pytorch.loggers.CSVLogger
+    init_args:
+      save_dir: lightning_logs
+      name: usas_jhu_clsp_ettin_encoder_68m
+      version: null
+      prefix: ''
+      flush_logs_every_n_steps: 100
+model:
+  base_model_name: "jhu-clsp/ettin-encoder-68m"
+  freeze_base_model: false
+  number_transformer_encoder_layers: 0
+  add_scalar_mixer: false
+  scalar_mix_layer_norm: true
+  transformer_encoder_hidden_dim: 512
+  transformer_encoder_num_heads: 8
+  batch_first: true
+  learning_rate: 5e-05
+  weight_decay: 0.01
+  use_scheduler: false
+  fraction_of_warm_up_steps: 0.1
+  scheduler_frequency: 1
+data:
+  batch_size: 16
