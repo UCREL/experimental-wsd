@@ -98,7 +98,9 @@ def map_negative_usas_labels(
     return {negative_usas_key: new_all_negative_usas_labels}
 
 
-def remove_duplicate_list_of_list_entries_while_maintaining_order(data: dict[str, Any], key: str) -> dict[str, Any]:
+def remove_duplicate_list_of_list_entries_while_maintaining_order(data: dict[str, Any],
+                                                                  key: str,
+                                                                  tags_to_filter_out: set[str] | None = None) -> dict[str, Any]:
     """
     Given a dataset sample, it will de-duplicate the data that is associated with 
     the given key. The data to de-duplicate should be a list of a list of Any hashable 
@@ -111,16 +113,27 @@ def remove_duplicate_list_of_list_entries_while_maintaining_order(data: dict[str
     Output:
     `key`: [[0,1,2,3], [1,2,3]]
 
+    This can be required for USAS tags as when the rule based tagger outputs tags 
+    some tags are combined e.g. Z1/A5 which means that token it has tagged belongs 
+    to both Z1 and A5, however when these tags are flattened, e.g. Z1 A5 it 
+    can create duplicates for a token as these tags can also be outputted 
+    individually.
+
     A HuggingFace Datasets mapper function which should be ran in non-batch mode.
     """
     all_token_usas_tags = data[key]
     all_de_duplicated_usas_tags = []
+
+    if tags_to_filter_out is None:
+        tags_to_filter_out = set()
 
     for token_usas_tags in all_token_usas_tags:
         unique_tags = set()
         de_duplicated_tags = []
         for usas_tag in token_usas_tags:
             if usas_tag in unique_tags:
+                continue
+            if usas_tag in tags_to_filter_out:
                 continue
             de_duplicated_tags.append(usas_tag)
             unique_tags.add(usas_tag)

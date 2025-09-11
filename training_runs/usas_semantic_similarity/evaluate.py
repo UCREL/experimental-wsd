@@ -20,10 +20,19 @@ from experimental_wsd.nn.token_similarity import TokenSimilarityVariableNegative
 logger = logging.getLogger(__name__)
 
 
-def main(best_model_path: Annotated[Path, typer.Argument(exists=True, file_okay=True, dir_okay=False, readable=True, writable=False, resolve_path=True)]):
+def main(best_model_path: Annotated[Path, typer.Argument(exists=True, file_okay=True, dir_okay=False, readable=True, writable=False, resolve_path=True)],
+         tags_that_cannot_be_predicted: Annotated[list[str] | None, typer.Option("-p", help="Tags that should be removed from the list of possible tags that the model can predict")] = None,
+         tags_not_to_evaluate_on: Annotated[list[str] | None, typer.Option("-e", help="Tags that should be removed from the evaluation dataset.")] = None):
     start_time = time.perf_counter()
     best_model_path_str = str(best_model_path)
-    usas_tag_to_description_mapper = processed_usas_utils.load_usas_mapper(USASMapper)
+    tags_that_cannot_be_predicted_set = None
+    if tags_that_cannot_be_predicted is not None:
+        tags_that_cannot_be_predicted_set = set(tags_that_cannot_be_predicted)
+    usas_tag_to_description_mapper = processed_usas_utils.load_usas_mapper(USASMapper,
+                                                                           tags_that_cannot_be_predicted_set)
+    tags_not_to_evaluate_on_set = set()
+    if tags_not_to_evaluate_on is not None:
+        tags_not_to_evaluate_on_set = set(tags_not_to_evaluate_on)
 
     if MosaicoCoreUSAS is None:
         error_message = (
@@ -36,7 +45,7 @@ def main(best_model_path: Annotated[Path, typer.Argument(exists=True, file_okay=
     test_file_path =  MosaicoCoreUSAS.test
     test_processed_file_path = processed_usas_utils.process_file(test_file_path, DATA_PROCESSING_DIR, "variable_mosaico_usas_9")
     test_dataset = datasets.load_dataset("json", data_files=str(test_processed_file_path))['train'].take(20000)
-    model = TokenSimilarityVariableNegatives.load_from_checkpoint(best_model_path_str).to(device="cpu")
+    model = TokenSimilarityVariableNegatives.load_from_checkpoint(best_model_path_str)
     tokenizer = AutoTokenizer.from_pretrained(model.base_model_name, add_prefix_space=True)
     top_1_scores = Counter()
     total = 0
@@ -60,10 +69,20 @@ def main(best_model_path: Annotated[Path, typer.Argument(exists=True, file_okay=
         for sentence_index, sentence in enumerate(test_dataset):
             all_usas_tags, usas_token_offsets = sentence['usas'], sentence['usas_token_offsets']
             tokenized_text = tokenizer(sentence['tokens'], truncation=False, padding=False, return_tensors="pt", is_split_into_words=True)
+            if tokenized_text.input_ids.shape[1] > tokenizer.model_max_length:
+                continue
             text_input_ids = tokenized_text.input_ids.to(model.device)
             text_attention_mask = tokenized_text.attention_mask.to(model.device)
             text_embedding = model.text_encoding(text_input_ids, text_attention_mask)
             for usas_tags, usas_token_offset in zip(all_usas_tags, usas_token_offsets):
+                filtered_usas_tags = []
+                for usas_tag in usas_tags:
+                    if usas_tag in tags_not_to_evaluate_on_set:
+                        continue
+                    filtered_usas_tags.append(usas_tag)
+                if not filtered_usas_tags:
+                    continue
+
                 skip_tag_as_empty = False
                 usas_token_offset_indexes = set(range(*usas_token_offset))
                 if len(usas_token_offset_indexes) == 1:
@@ -91,8 +110,8 @@ def main(best_model_path: Annotated[Path, typer.Argument(exists=True, file_okay=
                 label_similarity_score = model.token_label_similarity(usas_embedded_descriptions_tensor, token_embedding)
                 predicted_usas_tag = usas_index_to_tag[torch.argmax(label_similarity_score).item()]
                 
-                usas_tags_set = set(usas_tags)
-                if predicted_usas_tag in usas_tags_set:
+                filtered_usas_tags_set = set(filtered_usas_tags)
+                if predicted_usas_tag in filtered_usas_tags_set:
                     top_1_scores.update([predicted_usas_tag])
                 total += 1
             if (sentence_index % 100) == 0 and sentence_index != 0:

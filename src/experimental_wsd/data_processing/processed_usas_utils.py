@@ -237,13 +237,21 @@ def get_usas_tag_descriptions(usas_tag_name: str,
                                                                    collected_tag_descriptions)
     return collected_tag_descriptions
 
-def load_usas_mapper(usas_tag_descriptions_file: Path) -> dict[str, str]:
+def load_usas_mapper(usas_tag_descriptions_file: Path,
+                     tags_to_filter_out: set[str] | None) -> dict[str, str]:
 
     usas_mapping = {}
     with usas_tag_descriptions_file.open("r") as usas_mapper_fp:
         usas_mapping_data = usas_mapper_fp.read()
         for high_level_usas_tag, high_level_usas_tag_dict in yaml.safe_load(usas_mapping_data).items():
             get_usas_tag_descriptions(high_level_usas_tag, high_level_usas_tag_dict, usas_mapping)
+    if tags_to_filter_out:
+        tmp_usas_mapping = {}
+        for key, value in usas_mapping.items():
+            if key in tags_to_filter_out:
+                continue
+            tmp_usas_mapping[key] = value
+        usas_mapping = tmp_usas_mapping
     return usas_mapping
 
 

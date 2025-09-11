@@ -9,11 +9,12 @@ import lightning as L
 from transformers import AutoTokenizer
 import datasets
 import torch
+from torchdata.stateful_dataloader import StatefulDataLoader
 
 from experimental_wsd.config import MosaicoCoreUSAS, DATA_PROCESSING_DIR, USASMapper
 from experimental_wsd.data_processing import processed_usas_utils
 from experimental_wsd.data_processing.shared_token_utils import remove_duplicate_list_of_list_entries_while_maintaining_order, map_negative_usas_labels, usas_samples_to_single_sample, usas_join_positive_negative_labels, usas_map_to_definitions, tokenize_key, token_word_id_mask, filter_sequences_too_long
-from experimental_wsd.training_utils import collate_variable_token_similarity_dataset, DescendingTokenSimilarityBatchSampler
+from experimental_wsd.training_utils import collate_variable_token_similarity_dataset
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +43,7 @@ class VariableMosaicoUSASTraining(L.LightningDataModule):
                  dataset_folder_name: str,
                  overwrite_all_pre_processed_data: bool = False,
                  attention_pad_id: int = 0,
+                 filter_out_labels: list[str] | None = None,
                  ):
         """
         Args:
@@ -69,6 +71,12 @@ class VariableMosaicoUSASTraining(L.LightningDataModule):
                 for non-ambiguous terms. Default False.
             attention_pad_id (int): The integer ID that represents padding 
                 for the attention mask. Default 0.
+            filter_out_labels (list[str] | None): A list of USAS labels that
+                should not be in the data for training or evaluating. For example 
+                `[Z99]` would mean that the dataset will not contain any samples 
+                for that label, if None then no label filtering is applied. To 
+                NOTE if label filtering is applied then these filtered out labels 
+                will not appear as a negative training example either.
         """
         super().__init__()
         self.tokenizer = AutoTokenizer.from_pretrained(base_model_name,
@@ -84,6 +92,9 @@ class VariableMosaicoUSASTraining(L.LightningDataModule):
         processed_dataset_folder.mkdir(exist_ok=True)
         self.processed_dataset_path = Path(processed_dataset_folder, self.dataset_folder_name)
         self.attention_pad_id = attention_pad_id
+        self.filter_out_labels = filter_out_labels
+        if filter_out_labels is None:
+           self.filter_out_labels = set() 
         self.save_hyperparameters()
         
     
@@ -127,15 +138,23 @@ class VariableMosaicoUSASTraining(L.LightningDataModule):
         usas_dataset = datasets.DatasetDict({"train": training_dataset["train"],
                                              "validation": validation_dataset,
                                              "test": test_dataset})
-        usas_dataset_de_duplicated = usas_dataset.map(remove_duplicate_list_of_list_entries_while_maintaining_order, fn_kwargs={"key": "usas"}, num_proc=self.num_cpus_pre_processing)
+        usas_dataset_de_duplicated = usas_dataset.map(remove_duplicate_list_of_list_entries_while_maintaining_order,
+                                                      fn_kwargs={"key": "usas",
+                                                                 "tags_to_filter_out": self.filter_out_labels},
+                                                      num_proc=self.num_cpus_pre_processing)
         
-        usas_tag_to_description_mapper = processed_usas_utils.load_usas_mapper(USASMapper)
-        
-        training_label_statistics_file_path = Path(DATA_PROCESSING_DIR, f"variable_mosaico_usas_training_label_statistics.json")
-        if not file_exists(training_label_statistics_file_path, self.overwrite_all_pre_processed_data):
-            training_label_statistics = processed_usas_utils.get_usas_label_statistics(usas_dataset_de_duplicated["train"], usas_tag_to_description_mapper)
-            write_to_json(training_label_statistics, training_label_statistics_file_path)
-        training_label_statistics = read_json(training_label_statistics_file_path)
+        usas_tag_to_description_mapper = processed_usas_utils.load_usas_mapper(USASMapper,
+                                                                               self.filter_out_labels)
+        training_label_statistics: dict[str, int] | None = None
+        if not self.filter_out_labels:
+            training_label_statistics_file_path = Path(DATA_PROCESSING_DIR, f"variable_mosaico_usas_training_label_statistics.json")
+            if not file_exists(training_label_statistics_file_path, self.overwrite_all_pre_processed_data):
+                training_label_statistics = processed_usas_utils.get_usas_label_statistics(usas_dataset_de_duplicated["train"], usas_tag_to_description_mapper)
+                write_to_json(training_label_statistics, training_label_statistics_file_path)
+            training_label_statistics = read_json(training_label_statistics_file_path)
+        else:
+            training_label_statistics = processed_usas_utils.get_usas_label_statistics(usas_dataset_de_duplicated["train"],
+                                                                                       usas_tag_to_description_mapper)
         training_log_inverse_label_statistics = processed_usas_utils.usas_inverse_label_statistics(training_label_statistics, log_scaled=2)
         training_inverse_label_statistics = processed_usas_utils.usas_inverse_label_statistics(training_label_statistics, log_scaled=None)
 
@@ -224,34 +243,27 @@ class VariableMosaicoUSASTraining(L.LightningDataModule):
             self.test = train_validation_test_dataset["test"]
 
 
-    def train_dataloader(self) -> torch.utils.data.DataLoader:
+    def train_dataloader(self) -> StatefulDataLoader:
         collate_fn = collate_variable_token_similarity_dataset(self.tokenizer, text_input_ids="text_input_ids", text_attention_mask="text_attention_mask",
                                                        text_word_ids_mask="text_word_ids_mask", similarity_sentence_input_ids="label_definitions_input_ids",
                                                        similarity_sentence_attention_mask="label_definitions_attention_mask", 
                                                        label_key="label_ids", attention_pad_id=self.attention_pad_id)
-        #training_sampler = DescendingTokenSimilarityBatchSampler(self.train, batch_size=self.batch_size, similarity_sentence_key="label_definitions_input_ids", random=True)
-        #training_dataloader = torch.utils.data.DataLoader(self.train, batch_sampler=training_sampler, collate_fn=collate_fn,
-        #                                                  num_workers=self.num_dataloader_cpus)
-        training_dataloader = torch.utils.data.DataLoader(self.train, batch_size=self.batch_size, collate_fn=collate_fn,
+        training_dataloader = StatefulDataLoader(self.train, batch_size=self.batch_size, collate_fn=collate_fn,
                                                           num_workers=self.num_dataloader_cpus, pin_memory=True)
         return training_dataloader
     
-    def val_dataloader(self) -> torch.utils.data.DataLoader:
+    def val_dataloader(self) -> StatefulDataLoader:
         collate_fn = collate_variable_token_similarity_dataset(self.tokenizer, text_input_ids="text_input_ids", text_attention_mask="text_attention_mask",
                                                        text_word_ids_mask="text_word_ids_mask", similarity_sentence_input_ids="label_definitions_input_ids",
                                                        similarity_sentence_attention_mask="label_definitions_attention_mask", 
                                                        label_key="label_ids", attention_pad_id=self.attention_pad_id)
-        #validation_sampler = DescendingTokenSimilarityBatchSampler(self.validation, batch_size=self.batch_size, similarity_sentence_key="label_definitions_input_ids", random=False)
-        #validation_dataloader = torch.utils.data.DataLoader(self.validation, batch_sampler=validation_sampler, collate_fn=collate_fn, num_workers=self.num_dataloader_cpus)
-        validation_dataloader = torch.utils.data.DataLoader(self.validation, batch_size=self.batch_size, collate_fn=collate_fn, num_workers=self.num_dataloader_cpus, pin_memory=True)
+        validation_dataloader = StatefulDataLoader(self.validation, batch_size=self.batch_size, collate_fn=collate_fn, num_workers=self.num_dataloader_cpus, pin_memory=True)
         return validation_dataloader
     
-    def test_dataloader(self):
+    def test_dataloader(self) -> StatefulDataLoader:
         collate_fn = collate_variable_token_similarity_dataset(self.tokenizer, text_input_ids="text_input_ids", text_attention_mask="text_attention_mask",
                                                        text_word_ids_mask="text_word_ids_mask", similarity_sentence_input_ids="label_definitions_input_ids",
                                                        similarity_sentence_attention_mask="label_definitions_attention_mask", 
                                                        label_key="label_ids", attention_pad_id=self.attention_pad_id)
-        #test_sampler = DescendingTokenSimilarityBatchSampler(self.test, batch_size=self.batch_size, similarity_sentence_key="label_definitions_input_ids", random=False)
-        #test_dataloader = torch.utils.data.DataLoader(self.test, batch_sampler=test_sampler, collate_fn=collate_fn, num_workers=self.num_dataloader_cpus)
-        test_dataloader = torch.utils.data.DataLoader(self.test, batch_size=self.batch_size, collate_fn=collate_fn, num_workers=self.num_dataloader_cpus)
+        test_dataloader = StatefulDataLoader(self.test, batch_size=self.batch_size, collate_fn=collate_fn, num_workers=self.num_dataloader_cpus)
         return test_dataloader

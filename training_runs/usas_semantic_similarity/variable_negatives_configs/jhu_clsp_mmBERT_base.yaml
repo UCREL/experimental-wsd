@@ -5,17 +5,17 @@ trainer:
   devices: auto
   num_nodes: 1
   precision: 16-mixed
-  accumulate_grad_batches: 8
+  accumulate_grad_batches: 16
   logger:
     class_path: lightning.pytorch.loggers.CSVLogger
     init_args:
       save_dir: lightning_logs
-      name: usas_jhu_clsp_ettin_encoder_68m
+      name: usas_jhu_clsp_mmBERT_base
       version: null
       prefix: ''
       flush_logs_every_n_steps: 100
 model:
-  base_model_name: "jhu-clsp/ettin-encoder-68m"
+  base_model_name: "jhu-clsp/mmBERT-base"
   freeze_base_model: false
   number_transformer_encoder_layers: 0
   add_scalar_mixer: false
@@ -29,6 +29,6 @@ model:
   fraction_of_warm_up_steps: 0.1
   scheduler_frequency: 1
 data:
-  batch_size: 8
+  batch_size: 4
   filter_out_labels:
     - Z99

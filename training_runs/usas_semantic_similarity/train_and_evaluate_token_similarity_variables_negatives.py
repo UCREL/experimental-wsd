@@ -27,19 +27,12 @@ class TokenSimilarityVariableNegativesCLI(LightningCLI):
 
 def model_cli() -> None:
 
-    trainer_default_dict = {
-        "gradient_clip_algorithm": "norm",
-        "detect_anomaly": False,
-        "max_epochs": 20,
-        "val_check_interval": 1/5
-    }
     torch.set_float32_matmul_precision('high')
     cli = TokenSimilarityVariableNegativesCLI(
         model_class=TokenSimilarityVariableNegatives,
         datamodule_class=VariableMosaicoUSASTraining,
         run=True,
         seed_everything_default=False,
-        trainer_defaults=trainer_default_dict,
         parser_kwargs={"parser_mode": "omegaconf"}
     )
 

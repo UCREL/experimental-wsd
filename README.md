@@ -253,9 +253,10 @@ Not all of the datasets are large enough to require a separate script for pre-pr
 This is an example of how to pre-process the data with the base model `jhu-clsp/ettin-encoder-17m`
 
 ``` bash
-uv run python ./training_runs/usas_semantic_similarity/pre_process_dataset.py jhu-clsp/ettin-encoder-17m usas_semantic_similarity_variable_nagative_jhu_clsp_ettin_encoder_17_m --num-cpus-pre-processing 15
-uv run python ./training_runs/usas_semantic_similarity/pre_process_dataset.py jhu-clsp/ettin-encoder-68m usas_semantic_similarity_variable_nagative_jhu_clsp_ettin_encoder_68m --num-cpus-pre-processing 15
-uv run python ./training_runs/usas_semantic_similarity/pre_process_dataset.py FacebookAI/xlm-roberta-base usas_semantic_similarity_variable_nagative_FacebookAI_xlm_roberta_base --num-cpus-pre-processing 15
+uv run python ./training_runs/usas_semantic_similarity/pre_process_dataset.py jhu-clsp/ettin-encoder-17m usas_semantic_similarity_variable_nagative_jhu_clsp_ettin_encoder_17_m_z99_filtered --num-cpus-pre-processing 15 --filter-out-labels Z99
+uv run python ./training_runs/usas_semantic_similarity/pre_process_dataset.py jhu-clsp/ettin-encoder-68m usas_semantic_similarity_variable_nagative_jhu_clsp_ettin_encoder_68_m_z99_filtered --num-cpus-pre-processing 15 --filter-out-labels Z99
+uv run python ./training_runs/usas_semantic_similarity/pre_process_dataset.py jhu-clsp/mmBERT-small usas_semantic_similarity_variable_nagative_jhu_clsp_mmBERT_small_z99_filtered --num-cpus-pre-processing 15 --filter-out-labels Z99
+uv run python ./training_runs/usas_semantic_similarity/pre_process_dataset.py jhu-clsp/mmBERT-base usas_semantic_similarity_variable_nagative_jhu_clsp_mmBERT_base_z99_filtered --num-cpus-pre-processing 15 --filter-out-labels Z99
 ```
 
 ``` bash
@@ -266,7 +267,32 @@ srun -p cpu-48h python ./training_runs/usas_semantic_similarity/pre_process_data
 ``` bash
 uv run python ./training_runs/usas_semantic_similarity/train_and_evaluate_token_similarity_variables_negatives.py fit \
 --config ./training_runs/usas_semantic_similarity/variable_negatives_configs/base_config.yaml \
---config ./training_runs/usas_semantic_similarity/variable_negatives_configs/jhu_clsp_ettin_encoder_17m.yaml --model.learning_rate 1e-5 --data.dataset_folder_name usas_semantic_similarity_variable_nagative_jhu_clsp_ettin_encoder_17_m
+--config ./training_runs/usas_semantic_similarity/variable_negatives_configs/jhu_clsp_ettin_encoder_17m.yaml --model.learning_rate 1e-5 --data.dataset_folder_name usas_semantic_similarity_variable_nagative_jhu_clsp_ettin_encoder_17_m_z99_filtered
+```
+
+``` bash
+uv run python ./training_runs/usas_semantic_similarity/train_and_evaluate_token_similarity_variables_negatives.py fit \
+--config ./training_runs/usas_semantic_similarity/variable_negatives_configs/base_config.yaml \
+--config ./training_runs/usas_semantic_similarity/variable_negatives_configs/jhu_clsp_mmBERT_small.yaml --model.learning_rate 1e-5 --data.dataset_folder_name usas_semantic_similarity_variable_nagative_jhu_clsp_mmBERT_small_z99_filtered
+```
+
+``` bash
+uv run python ./training_runs/usas_semantic_similarity/train_and_evaluate_token_similarity_variables_negatives.py fit \
+--config ./training_runs/usas_semantic_similarity/variable_negatives_configs/base_config.yaml \
+--config ./training_runs/usas_semantic_similarity/variable_negatives_configs/jhu_clsp_ettin_encoder_68m.yaml --model.learning_rate 1e-5 --data.dataset_folder_name usas_semantic_similarity_variable_nagative_jhu_clsp_ettin_encoder_68m
+```
+
+To resume training
+``` bash
+uv run python ./training_runs/usas_semantic_similarity/train_and_evaluate_token_similarity_variables_negatives.py fit \
+--config ./training_runs/usas_semantic_similarity/variable_negatives_configs/base_config.yaml \
+--config ./training_runs/usas_semantic_similarity/variable_negatives_configs/jhu_clsp_ettin_encoder_17m.yaml --model.learning_rate 1e-5 --data.dataset_folder_name usas_semantic_similarity_variable_nagative_jhu_clsp_ettin_encoder_17_m --ckpt_path ./lightning_logs/usas_jhu_clsp_ettin_encoder_17m/version_15/checkpoints/last.ckpt
+```
+
+``` bash
+uv run python ./training_runs/usas_semantic_similarity/train_and_evaluate_token_similarity_variables_negatives.py fit \
+--config ./training_runs/usas_semantic_similarity/variable_negatives_configs/base_config.yaml \
+--config ./training_runs/usas_semantic_similarity/variable_negatives_configs/jhu_clsp_ettin_encoder_17m.yaml --model.learning_rate 1e-5 --data.dataset_folder_name usas_semantic_similarity_variable_nagative_jhu_clsp_ettin_encoder_17_m_z99_filtered --ckpt_path ./lightning_logs/usas_jhu_clsp_ettin_encoder_17m/version_0/checkpoints/last.ckpt
 ```
 
 ``` bash
@@ -275,9 +301,13 @@ sbatch slurm_runs/semantic_similarity/usas_variable_negatives/xlmr_base.sh --mod
 ```
 
 
+When evaluating if the sentence is longer than the length the model can understand we skip the sentence.
 ``` bash
-uv run python ./training_runs/usas_semantic_similarity/evaluate.py ./lightning_logs/usas_jhu_clsp_ettin_encoder_17m/version_14/checkpoints/last.ckpt
+uv run python ./training_runs/usas_semantic_similarity/evaluate.py ./lightning_logs/usas_jhu_clsp_ettin_encoder_17m/version_0/checkpoints/model-step-step=532637.ckpt -p Z99 -e Z99
+uv run python ./training_runs/usas_semantic_similarity/evaluate.py ./lightning_logs/old_usas_jhu_clsp_ettin_encoder_17m/version_15/checkpoints/best-model-epoch-epoch=2.ckpt -p Z99 -e Z99
+
 uv run python ./training_runs/usas_semantic_similarity/evaluate.py ./lightning_logs/usas_jhu_clsp_ettin_encoder_17m/version_15/checkpoints/last.ckpt
+uv run python ./training_runs/usas_semantic_similarity/evaluate.py ./lightning_logs/usas_xlmr_base/version_0/checkpoints/last.ckpt
 ```
 
 
