@@ -296,8 +296,10 @@ uv run python ./training_runs/usas_semantic_similarity/train_and_evaluate_token_
 ```
 
 ``` bash
-sbatch slurm_runs/semantic_similarity/usas_variable_negatives/jhu_clsp_ettin_68m.sh --model.learning_rate 1e-5 --data.dataset_folder_name usas_semantic_similarity_variable_nagative_jhu_clsp_ettin_encoder_68m
-sbatch slurm_runs/semantic_similarity/usas_variable_negatives/xlmr_base.sh --model.learning_rate 1e-5 --data.dataset_folder_name usas_semantic_similarity_variable_nagative_FacebookAI_xlm_roberta_base
+sbatch slurm_runs/semantic_similarity/usas_variable_negatives/jhu_clsp_ettin_17m.sh
+sbatch slurm_runs/semantic_similarity/usas_variable_negatives/jhu_clsp_ettin_68m.sh
+sbatch slurm_runs/semantic_similarity/usas_variable_negatives/jhu_clsp_mmBERT_base.sh
+sbatch slurm_runs/semantic_similarity/usas_variable_negatives/jhu_clsp_mmBERT_small.sh
 ```
 
 

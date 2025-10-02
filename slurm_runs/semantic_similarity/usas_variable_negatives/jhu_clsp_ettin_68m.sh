@@ -6,4 +6,4 @@
 srun python $(pwd)/training_runs/usas_semantic_similarity/train_and_evaluate_token_similarity_variables_negatives.py fit \
 --config $(pwd)/training_runs/usas_semantic_similarity/variable_negatives_configs/base_config.yaml \
 --config $(pwd)/training_runs/usas_semantic_similarity/variable_negatives_configs/jhu_clsp_ettin_encoder_68m.yaml \
-"$@"
+--model.learning_rate 1e-5 --data.dataset_folder_name usas_semantic_similarity_variable_nagative_jhu_clsp_ettin_encoder_68_m_z99_filtered

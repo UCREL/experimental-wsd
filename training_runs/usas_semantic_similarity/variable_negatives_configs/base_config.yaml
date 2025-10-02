@@ -84,7 +84,7 @@ data:
     add_prefix_space: true
   batch_size: 32
   num_cpus_pre_processing: 10
-  num_dataloader_cpus: 12
+  num_dataloader_cpus: 5
   overwrite_all_pre_processed_data: false
   attention_pad_id: 0
   filter_out_labels: null
