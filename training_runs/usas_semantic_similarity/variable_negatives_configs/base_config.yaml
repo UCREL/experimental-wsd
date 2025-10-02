@@ -27,7 +27,8 @@ trainer:
         save_top_k: -1
         save_last: true
         save_on_exception: true
-        filename: "model-step-{step}"
+        filename: "model-{step}-{${tracking_metric}:.5f}"
+        auto_insert_metric_name: true
     - class_path: "lightning.pytorch.callbacks.LearningRateMonitor"
       init_args:
         logging_interval: "step"
