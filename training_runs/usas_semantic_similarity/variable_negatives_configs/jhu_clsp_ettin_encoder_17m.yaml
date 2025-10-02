@@ -9,7 +9,7 @@ trainer:
   logger:
     class_path: lightning.pytorch.loggers.CSVLogger
     init_args:
-      save_dir: /workspaces/experimental-wsd/lightning_logs
+      save_dir: lightning_logs
       name: usas_jhu_clsp_ettin_encoder_17m
       version: null
       prefix: ''
