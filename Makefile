@@ -13,8 +13,6 @@ check: lock
 	@uv run ruff check
 	@echo "🚀 Checking formatting with Ruff"
 	@uv run ruff format --check
-#	@echo "🚀 Checking types with pyrefly"
-#	@uv run pyrefly check src tests
 
 .PHONY: test
 test: lock
