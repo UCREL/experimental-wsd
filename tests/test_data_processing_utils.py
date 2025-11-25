@@ -1,4 +1,3 @@
-
 import pytest
 import wn
 from transformers import AutoTokenizer

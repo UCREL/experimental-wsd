@@ -1,30 +1,39 @@
-from typing import Any, Literal
-from pathlib import Path
 import logging
 import math
-from collections import Counter
 import random
+import re
+from collections import Counter
+from pathlib import Path
+from typing import Any, Literal
 
+import datasets
 import yaml
 from pydantic import BaseModel, Field, create_model
-import datasets
 
 logger = logging.getLogger(__name__)
 
-USAS_TAGS_TO_IGNORE = set([
-    "PUNC",
-    "S",
-    "M3.3",
-    "V",
-    "Z",
-    "Q4.4",
-    "X7.2",
-    "A1.2.4",
-    "A9.1",
-    "G1.1.1",
-    "S9.2",
-    "N"
-])
+USAS_TAGS_TO_IGNORE = set(
+    [
+        "PUNC",
+        "S",
+        "M3.3",
+        "V",
+        "Z",
+        "Q4.4",
+        "X7.2",
+        "A1.2.4",
+        "A9.1",
+        "G1.1.1",
+        "S9.2",
+        "N",
+    ]
+)
+
+TAG_RE = re.compile(r"^[A-Z](\d+)?((\.\d+)+)?")
+ALT_TAG_RE = re.compile(r"^[a-z](\d+)((\.\d+)+)?")
+POSITIVE_MARKERS_RE = re.compile(r"\++")
+NEGATIVE_MARKERS_RE = re.compile(r"\-+")
+
 
 class USASTag(BaseModel):
     """
@@ -82,6 +91,136 @@ class USASTagGroup(BaseModel):
     tags: list[USASTag] = Field(
         title="USAS Tags", description=_tags_description, examples=_tags_examples
     )
+
+    def tags_equal(self, other_tag_group: "USASTagGroup") -> bool:
+        if len(other_tag_group.tags) != len(self.tags):
+            return False
+        for this_tag, other_tag in zip(self.tags, other_tag_group.tags):
+            if this_tag.tag != other_tag.tag:
+                return False
+        return True
+
+
+def parse_usas_token_group(
+    usas_tag_texts: list[str], valid_usas_tags: set[str] | None
+) -> list[USASTagGroup]:
+    """
+    Given a list of strings whereby each string represents a USAS Tag Group in
+    string format it will convert this into a more structured list format.
+
+    Complex examples of `usas_tag_texts`:
+    `["L1", "E3-", "O4.2-", "X5.2+", "A6.2-", "A1.7-", "A7-", "W3",
+      "L2", "F1", "S1.2.4-", "Z2", "Z2/S2mf", "Z3", "O4.3", "G1.2", "G1.2/S2mf"]`
+
+    Args:
+        usas_tag_texts (list[str]): The list of strings that each represent a
+            USAS Tag Group.
+        valid_usas_tag (set[str] | None): If not None defines the set of
+            Valid USAS tags. Default None.
+    Returns:
+        list[USASTagGroup]: structured format of the USAS tags.
+    Raises:
+        ValueError: If the USAS tag string is not correctly formatted.
+        ValueError: If `valid_usas_tag` is not None and a given USAS tag is not
+            in the set of valid USAS tags.
+    """
+
+    def parse_usas_tag(usas_tag_text: str) -> USASTag:
+        """
+        Given a single USAS tag text, e.g. `X5.2+` it is converted into
+        a structured format.
+
+        Note: a USAS tag text should not contain a `/`,
+        e.g. `G1.2/S2mf` as this contains two USAS tags that represent
+        a combined semantic meaning of a token.
+
+        Args:
+            usas_tag_text (str): Single USAS tag text
+        Returns:
+            USASTag: A structured format of the USAS tag.
+        """
+
+        tag_match = TAG_RE.match(usas_tag_text)
+        tag = ""
+
+        if tag_match:
+            tag = tag_match.group()
+            usas_tag_text = TAG_RE.sub("", usas_tag_text)
+        elif ALT_TAG_RE.match(usas_tag_text):
+            alt_tag_match = ALT_TAG_RE.match(usas_tag_text)
+            assert alt_tag_match is not None
+            tag = alt_tag_match.group()
+            usas_tag_text = ALT_TAG_RE.sub("", usas_tag_text)
+        else:
+            raise ValueError(
+                f"Cannot find the tag for this USAS tag text: {usas_tag_text}"
+            )
+
+        number_positive_markers = 0
+        positive_marker_match = POSITIVE_MARKERS_RE.search(usas_tag_text)
+        if positive_marker_match:
+            number_positive_markers = len(positive_marker_match.group())
+            usas_tag_text = POSITIVE_MARKERS_RE.sub("", usas_tag_text)
+
+        number_negative_markers = 0
+        negative_marker_match = NEGATIVE_MARKERS_RE.search(usas_tag_text)
+        if negative_marker_match:
+            number_negative_markers = len(negative_marker_match.group())
+            usas_tag_text = NEGATIVE_MARKERS_RE.sub("", usas_tag_text)
+
+        is_male = False
+        if "m" in usas_tag_text:
+            is_male = True
+
+        is_female = False
+        if "f" in usas_tag_text:
+            is_female = True
+
+        contain_rare_marker_1 = False
+        if "%" in usas_tag_text:
+            contain_rare_marker_1 = True
+
+        contain_rare_marker_2 = False
+        if "@" in usas_tag_text:
+            contain_rare_marker_2 = True
+
+        contains_antecedent = False
+        if "c" in usas_tag_text:
+            contains_antecedent = True
+
+        contains_neuter = False
+        if "n" in usas_tag_text:
+            contains_neuter = True
+
+        # Currently do not support finding idioms
+        is_idiom = False
+
+        if valid_usas_tags is not None:
+            if tag not in valid_usas_tags:
+                raise ValueError(f"The tag `{tag}` is not in the USAS tagset")
+        return USASTag(
+            tag=tag,
+            male=is_male,
+            female=is_female,
+            rarity_marker_1=contain_rare_marker_1,
+            rarity_marker_2=contain_rare_marker_2,
+            number_positive_markers=number_positive_markers,
+            number_negative_markers=number_negative_markers,
+            antecedents=contains_antecedent,
+            neuter=contains_neuter,
+            idiom=is_idiom,
+        )
+
+    token_usas_tags: list[USASTagGroup] = []
+
+    for usas_tag_group in usas_tag_texts:
+        usas_tags: list[USASTag] = []
+        for usas_tag_text in usas_tag_group.split("/"):
+            usas_tags.append(parse_usas_tag(usas_tag_text))
+        token_usas_tags.append(USASTagGroup(tags=usas_tags))
+
+    return token_usas_tags
+
 
 class WikiDataExport(BaseModel):
     document_id: str = Field(
@@ -206,45 +345,58 @@ def create_tagged_wiki_data_export_model(
     )
     return tagged_wiki_data_export_model_cls
 
-def get_usas_tag_descriptions(usas_tag_name: str,
-                              usas_tag_dict: dict[str, Any],
-                              collected_tag_descriptions: dict[str, str]
-                              ) -> dict[str, str]:
+
+def get_usas_tag_descriptions(
+    usas_tag_name: str,
+    usas_tag_dict: dict[str, Any],
+    collected_tag_descriptions: dict[str, str],
+) -> dict[str, str]:
     """
-    A recursive function that returns a dictionary of a USAS tag and as a value 
+    A recursive function that returns a dictionary of a USAS tag and as a value
     it's description.
     """
     if "title" in usas_tag_dict and "description" in usas_tag_dict:
         title_description = f"title: {usas_tag_dict['title']} description: {usas_tag_dict['description']}"
         if usas_tag_name in collected_tag_descriptions:
-            raise KeyError(f"Duplicate usas tag name found: {usas_tag_name} "
-                           "when reading the following data: "
-                           f"{usas_tag_dict}, currently found usas tags: "
-                           f"{collected_tag_descriptions}")
+            raise KeyError(
+                f"Duplicate usas tag name found: {usas_tag_name} "
+                "when reading the following data: "
+                f"{usas_tag_dict}, currently found usas tags: "
+                f"{collected_tag_descriptions}"
+            )
         collected_tag_descriptions[usas_tag_name] = title_description.strip()
     elif "title" in usas_tag_dict:
-        raise KeyError("No description key found when it is expected for: "
-                       f"{usas_tag_name} {usas_tag_dict}")
+        raise KeyError(
+            "No description key found when it is expected for: "
+            f"{usas_tag_name} {usas_tag_dict}"
+        )
     elif "description" in usas_tag_dict:
-        raise KeyError("No title key found when it is expected for: "
-                       f"{usas_tag_name} {usas_tag_dict}")
+        raise KeyError(
+            "No title key found when it is expected for: "
+            f"{usas_tag_name} {usas_tag_dict}"
+        )
 
     keys_to_ignore = set(["title", "description"])
     for child_usas_tag_name, child_usas_tag_dict in usas_tag_dict.items():
         if child_usas_tag_name not in keys_to_ignore:
-            collected_tag_descriptions = get_usas_tag_descriptions(child_usas_tag_name,
-                                                                   child_usas_tag_dict,
-                                                                   collected_tag_descriptions)
+            collected_tag_descriptions = get_usas_tag_descriptions(
+                child_usas_tag_name, child_usas_tag_dict, collected_tag_descriptions
+            )
     return collected_tag_descriptions
 
-def load_usas_mapper(usas_tag_descriptions_file: Path,
-                     tags_to_filter_out: set[str] | None) -> dict[str, str]:
 
+def load_usas_mapper(
+    usas_tag_descriptions_file: Path, tags_to_filter_out: set[str] | None
+) -> dict[str, str]:
     usas_mapping = {}
     with usas_tag_descriptions_file.open("r") as usas_mapper_fp:
         usas_mapping_data = usas_mapper_fp.read()
-        for high_level_usas_tag, high_level_usas_tag_dict in yaml.safe_load(usas_mapping_data).items():
-            get_usas_tag_descriptions(high_level_usas_tag, high_level_usas_tag_dict, usas_mapping)
+        for high_level_usas_tag, high_level_usas_tag_dict in yaml.safe_load(
+            usas_mapping_data
+        ).items():
+            get_usas_tag_descriptions(
+                high_level_usas_tag, high_level_usas_tag_dict, usas_mapping
+            )
     if tags_to_filter_out:
         tmp_usas_mapping = {}
         for key, value in usas_mapping.items():
@@ -260,17 +412,18 @@ class MosaicoDocumentID(BaseModel):
     wikidata_id: str = Field(examples=["Q194422"])
     document_id: str = Field(examples=["34256325"])
     sentence_id: str = Field(examples=["5736275"])
-    
 
     def __str__(self) -> str:
-
         return f"{self.dataset_id}.{self.wikidata_id}.{self.document_id}.{self.sentence_id}"
-    
+
+
 class MosaicoUSASSentence(BaseModel):
-    _text_description = ("This is represented as the tokens for the given "
-                         "sentence boundaries joined together by a single whitespace. "
-                         "This is due to not being able to recover the "
-                         "character offsets for a sentence boundary from the CLAWS tokenizer.")
+    _text_description = (
+        "This is represented as the tokens for the given "
+        "sentence boundaries joined together by a single whitespace. "
+        "This is due to not being able to recover the "
+        "character offsets for a sentence boundary from the CLAWS tokenizer."
+    )
     id: MosaicoDocumentID
     text: str = Field(description=_text_description)
     tokens: list[str]
@@ -281,23 +434,28 @@ class MosaicoUSASSentence(BaseModel):
     usas_token_offsets: list[list[int]]
 
 
-
 def parse_usas_document(usas_document: BaseModel) -> list[MosaicoUSASSentence]:
     dataset_id = "mosaico_core_usas"
     structured_usas_document: list[MosaicoUSASSentence] = []
     for sentence_id, sentence_boundary in enumerate(usas_document.sentence_boundaries):
-        mosaico_id = MosaicoDocumentID(dataset_id=dataset_id,
-                                       wikidata_id=usas_document.wikidata_id,
-                                       document_id=usas_document.document_id,
-                                       sentence_id=str(sentence_id))
+        mosaico_id = MosaicoDocumentID(
+            dataset_id=dataset_id,
+            wikidata_id=usas_document.wikidata_id,
+            document_id=usas_document.document_id,
+            sentence_id=str(sentence_id),
+        )
 
         start_sentence_offset, end_sentence_offset = sentence_boundary
-        
-        relevant_tokens = usas_document.tokens[start_sentence_offset: end_sentence_offset]
-        relevant_lemmas = usas_document.lemmas[start_sentence_offset: end_sentence_offset]
+
+        relevant_tokens = usas_document.tokens[
+            start_sentence_offset:end_sentence_offset
+        ]
+        relevant_lemmas = usas_document.lemmas[
+            start_sentence_offset:end_sentence_offset
+        ]
         sentence_text = " ".join(relevant_tokens)
 
-        relevant_usas = usas_document.usas[start_sentence_offset: end_sentence_offset]
+        relevant_usas = usas_document.usas[start_sentence_offset:end_sentence_offset]
         relevant_token_offsets: list[list[int]] = []
         relevant_filtered_usas = []
         is_content_tokens = []
@@ -307,7 +465,7 @@ def parse_usas_document(usas_document: BaseModel) -> list[MosaicoUSASSentence]:
             for usas_tag_group in usas_tag_groups:
                 for usas_tag in usas_tag_group.tags:
                     usas_tag = usas_tag.tag.upper()
-                    if usas_tag == 'Z5':
+                    if usas_tag == "Z5":
                         content_token = False
                     if usas_tag in USAS_TAGS_TO_IGNORE:
                         continue
@@ -319,35 +477,36 @@ def parse_usas_document(usas_document: BaseModel) -> list[MosaicoUSASSentence]:
             is_content_tokens.append(content_token)
         if not relevant_filtered_usas:
             continue
-        
-        relevant_pos = usas_document.pos[start_sentence_offset: end_sentence_offset]
+
+        relevant_pos = usas_document.pos[start_sentence_offset:end_sentence_offset]
         relevant_filtered_pos = []
         for pos_tag_group in relevant_pos:
             if len(pos_tag_group) == 0:
                 relevant_filtered_pos.append("")
             else:
                 relevant_filtered_pos.append(pos_tag_group[0][0])
-        
-        
-        
-        
 
-        structured_usas_document.append(MosaicoUSASSentence(id=mosaico_id,
-                                   text=sentence_text,
-                                   tokens=relevant_tokens,
-                                   lemmas=relevant_lemmas,
-                                   pos=relevant_filtered_pos,
-                                   is_content_token=is_content_tokens,
-                                   usas=relevant_filtered_usas,
-                                   usas_token_offsets=relevant_token_offsets))
+        structured_usas_document.append(
+            MosaicoUSASSentence(
+                id=mosaico_id,
+                text=sentence_text,
+                tokens=relevant_tokens,
+                lemmas=relevant_lemmas,
+                pos=relevant_filtered_pos,
+                is_content_token=is_content_tokens,
+                usas=relevant_filtered_usas,
+                usas_token_offsets=relevant_token_offsets,
+            )
+        )
     return structured_usas_document
 
 
-def process_file(usas_file: Path,
-                 data_dir: Path,
-                 file_name: str,
-                 overwrite: bool = False,
-                 ) -> Path:
+def process_file(
+    usas_file: Path,
+    data_dir: Path,
+    file_name: str,
+    overwrite: bool = False,
+) -> Path:
     file_path = Path(data_dir, file_name)
     if file_path.exists() and not overwrite:
         logger.info(
@@ -355,28 +514,31 @@ def process_file(usas_file: Path,
             "not writing the data to it."
         )
         return file_path
-    usas_data_model = create_tagged_wiki_data_export_model("tokens", "lemmas", "pos", "usas", "usas_raw", "sentence_boundaries")
+    usas_data_model = create_tagged_wiki_data_export_model(
+        "tokens", "lemmas", "pos", "usas", "usas_raw", "sentence_boundaries"
+    )
     with file_path.open("w", encoding="utf-8") as write_fp:
         with usas_file.open("r", encoding="utf-8") as usas_fp:
             for line in usas_fp:
-                usas_tagged_sentences = parse_usas_document(usas_data_model.model_validate_json(line))
+                usas_tagged_sentences = parse_usas_document(
+                    usas_data_model.model_validate_json(line)
+                )
                 for usas_tagged_sentence in usas_tagged_sentences:
                     write_fp.write(f"{usas_tagged_sentence.model_dump_json()}\n")
     return file_path
 
 
 def get_usas_label_statistics(
-    hf_dataset: datasets.Dataset,
-    usas_mapper: dict[str, str] | None = None
+    hf_dataset: datasets.Dataset, usas_mapper: dict[str, str] | None = None
 ) -> dict[str, int]:
     """
-    Given a Mosaico USAS labelled dataset it returns the count of all the 
+    Given a Mosaico USAS labelled dataset it returns the count of all the
     USAS labels within that dataset
 
     Args:
 
-        usas_mapper (dict[str, str] | None): If not None it will add the USAS 
-            labels that are not within the dataset to the counter as entries 
+        usas_mapper (dict[str, str] | None): If not None it will add the USAS
+            labels that are not within the dataset to the counter as entries
             that contain 0 counts.
     """
     label_counter = Counter()
@@ -389,18 +551,19 @@ def get_usas_label_statistics(
                 label_counter[usas_label] = 0
     return label_counter
 
-def usas_inverse_label_statistics(usas_label_frequency: dict[str, int],
-                                  log_scaled: int | None = None
-                                  ) -> dict[str, float]:
+
+def usas_inverse_label_statistics(
+    usas_label_frequency: dict[str, int], log_scaled: int | None = None
+) -> dict[str, float]:
     """
-    Given a dictionary of USAS label to frequency within a dataset, it returns 
+    Given a dictionary of USAS label to frequency within a dataset, it returns
     the USAS label to inverse term frequency in that dataset.
 
-    NOTE: If the frequency of a USAS label is 0 then that USAS label will be 
+    NOTE: If the frequency of a USAS label is 0 then that USAS label will be
     skipped/ignored and will not be in the returned dictionary.
 
     Args:
-        log_scaled (int | None): If an integer then the inverse term frequency will 
+        log_scaled (int | None): If an integer then the inverse term frequency will
             be log scaled by a log to the base of this log scaled integer.
     """
     number_labels = sum(usas_label_frequency.values())
@@ -415,37 +578,36 @@ def usas_inverse_label_statistics(usas_label_frequency: dict[str, int],
     return usas_inverse_frequency
 
 
-
 def random_negative_usas_label(
-        positive_usas_labels: list[str],
-        negative_usas_labels: list[str],
-        label_weights: dict[str, float],
-        use_weights: bool
+    positive_usas_labels: list[str],
+    negative_usas_labels: list[str],
+    label_weights: dict[str, float],
+    use_weights: bool,
 ) -> str:
     """
-    Samples a random USAS tag from `label_weights` after the `positive_usas_labels` 
-    and `negative_usas_labels` have been removed from the possible USAS tags 
+    Samples a random USAS tag from `label_weights` after the `positive_usas_labels`
+    and `negative_usas_labels` have been removed from the possible USAS tags
     that could be sampled.
 
     Args:
         positive_usas_labels (list[str]): The list of true USAS tags
         negative_usas_labels (list[str]): The list of negative USAS tags
-        label_weights (dict[str, float]): A dictionary of all relevant USAS tags 
-            and how much weight should be applied to them. To NOTE is `use_weight` 
-            is False the weights are never used, in addition not all USAS tags 
-            have to exist in this weighting only those that you would like 
+        label_weights (dict[str, float]): A dictionary of all relevant USAS tags
+            and how much weight should be applied to them. To NOTE is `use_weight`
+            is False the weights are never used, in addition not all USAS tags
+            have to exist in this weighting only those that you would like
             to sample from.
-        use_weights (bool): Whether to use the weighting in `label_weights` whereby 
-            the higher the weight the more likely the USAS tag will be randomly 
-            sampled or if `False` an even random sample of all relevant tags 
+        use_weights (bool): Whether to use the weighting in `label_weights` whereby
+            the higher the weight the more likely the USAS tag will be randomly
+            sampled or if `False` an even random sample of all relevant tags
             will be applied.
     Raises:
-        ValueError: If the number of USAS tags to sample from after removing 
+        ValueError: If the number of USAS tags to sample from after removing
             `positive_usas_labels` and `negative_usas_labels` tags is zero.
     Returns:
-        A randomly sampled USAS tag from the USAS tags that are the key's of 
-        the `label_weights` argument after the `positive_usas_labels` and 
-        `negative_usas_labels` tags have been removed from the list of 
+        A randomly sampled USAS tag from the USAS tags that are the key's of
+        the `label_weights` argument after the `positive_usas_labels` and
+        `negative_usas_labels` tags have been removed from the list of
         possible tags to sample from.
     """
     labels_to_ignore = set(positive_usas_labels + negative_usas_labels)
@@ -460,16 +622,17 @@ def random_negative_usas_label(
         relevant_label_cumulative_weights.append(total_weight_value)
         total_weight_value += weight
     if len(relevant_labels) == 0:
-        raise ValueError("The number of USAS tags to sample from after removing "
-                         "the positive and negative USAS tags is zero, which "
-                         "cannot be the case. Positive and Negative USAS tags: "
-                         f"{positive_usas_labels} and {negative_usas_labels} "
-                         "The dictionary of USAS tags and their weights: "
-                         f"{label_weights}")
+        raise ValueError(
+            "The number of USAS tags to sample from after removing "
+            "the positive and negative USAS tags is zero, which "
+            "cannot be the case. Positive and Negative USAS tags: "
+            f"{positive_usas_labels} and {negative_usas_labels} "
+            "The dictionary of USAS tags and their weights: "
+            f"{label_weights}"
+        )
     if use_weights:
         return random.choices(relevant_labels, k=1)[0]
     else:
-        return random.choices(relevant_labels, cum_weights=relevant_label_cumulative_weights, k=1)[0]
-
-
-
+        return random.choices(
+            relevant_labels, cum_weights=relevant_label_cumulative_weights, k=1
+        )[0]

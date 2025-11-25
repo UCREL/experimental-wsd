@@ -263,10 +263,11 @@ class AscendingTokenNegativeExamplesBatchSampler(Sampler[list[int]]):
             batch_index_chunk = batch_index_chunks[index_of_batch_index_chunks]
             yield batch_index_chunk.tolist()
 
+
 class DescendingTokenSimilarityBatchSampler(Sampler[list[int]]):
     """
     A sampler that generates batch indexes in descending order of number of
-    similarity sentences that a token has to match with, of which 1 sentence 
+    similarity sentences that a token has to match with, of which 1 sentence
     is expected to be the positive matched sentence.
     """
 
@@ -284,8 +285,8 @@ class DescendingTokenSimilarityBatchSampler(Sampler[list[int]]):
                 the number of samples in the dataset. The inner dictionary represents
                 the data, e.g. `positive_label_input_ids`, `negative_label_input_ids`, etc.
             batch_size (int): The batch size.
-            similarity_sentence_key (str): The key that represents the 
-                sentences that the token has to be matched within. This key 
+            similarity_sentence_key (str): The key that represents the
+                sentences that the token has to be matched within. This key
                 should contain a list of a list of token IDs.
             random (bool): If True then the batches with similar sizes will be
                 yielded in random order rather than the ascending order.
@@ -310,7 +311,9 @@ class DescendingTokenSimilarityBatchSampler(Sampler[list[int]]):
             sizes.append(number_similarity_sentences)
         sizes = torch.tensor(sizes)
         number_batches = len(self)
-        batch_index_chunks = list(torch.chunk(torch.argsort(sizes, descending=True), number_batches))
+        batch_index_chunks = list(
+            torch.chunk(torch.argsort(sizes, descending=True), number_batches)
+        )
         indexes_of_batch_index_chunks = torch.arange(
             0, number_batches, dtype=torch.float
         )
@@ -335,20 +338,19 @@ class DescendingTokenSimilarityBatchSampler(Sampler[list[int]]):
 def collate_variable_token_similarity_dataset(
     tokenizer: PreTrainedTokenizerFast,
     text_input_ids: str = "text_input_ids",
-    text_attention_mask = "text_attention_mask",
-    text_word_ids_mask = "text_word_ids_mask",
-    similarity_sentence_input_ids = "label_definitions_input_ids",
-    similarity_sentence_attention_mask = "label_definitions_attention_mask",
+    text_attention_mask="text_attention_mask",
+    text_word_ids_mask="text_word_ids_mask",
+    similarity_sentence_input_ids="label_definitions_input_ids",
+    similarity_sentence_attention_mask="label_definitions_attention_mask",
     label_key: str = "label_ids",
     attention_pad_id: int = 0,
-        
 ) -> Callable[[list[dict[str, Any]]], dict[str, torch.Tensor]]:
     """
     This generates a function that converts a batch, 1 or more samples, of
-    token level semantic similarity data whereby a token/MWE has a variable number 
-    of semantically similar sentences of which one sentence is the correct 
-    sentence, this correct sentence ID should be expressed via the label_ids 
-    key value into a format suitable as input into a machine learning model 
+    token level semantic similarity data whereby a token/MWE has a variable number
+    of semantically similar sentences of which one sentence is the correct
+    sentence, this correct sentence ID should be expressed via the label_ids
+    key value into a format suitable as input into a machine learning model
     for either training or inference.
 
     The `attention_pad_id` is used for the following key-values:
@@ -359,9 +361,9 @@ def collate_variable_token_similarity_dataset(
 
     def _collate(data: list[dict[str, Any]]) -> dict[str, torch.Tensor]:
         """
-        Expects a batch, 1 or more samples, of token level semantic similarity data 
-        and returns the data so that the dictionary keys are the same with each 
-        value as a torch tensor containing a batch of data whereby the 
+        Expects a batch, 1 or more samples, of token level semantic similarity data
+        and returns the data so that the dictionary keys are the same with each
+        value as a torch tensor containing a batch of data whereby the
         dimensions are the same for the relevant keys;
 
         B represents the batch size. This is the number of text sequences.
@@ -380,8 +382,8 @@ def collate_variable_token_similarity_dataset(
 
         The `label_key` will contain no padding.
 
-        The `similarity_sentence` input ids and attention masks could contain 
-        entire vectors of padding. This is due to the fact that not all text 
+        The `similarity_sentence` input ids and attention masks could contain
+        entire vectors of padding. This is due to the fact that not all text
         sequences will have the same number of similar sentences.
 
         Args:
@@ -407,7 +409,7 @@ def collate_variable_token_similarity_dataset(
             else:
                 tensor_value = torch.hstack((pad_tensor, tensor_value))
             return tensor_value
-        
+
         def _add_padding_lists(
             sequence: list[Any], expected_sequence_length: int
         ) -> list[Any]:
@@ -420,20 +422,19 @@ def collate_variable_token_similarity_dataset(
                     copied_sequence.append([])
                 return copied_sequence
 
-
         padding_side = tokenizer.padding_side
         text_padding_token = tokenizer.pad_token_id
 
-        max_text_length = 0 # T
-        max_number_similarity_sentences = 0 # S
-        max_similarity_sentence_length = 0 # ST
+        max_text_length = 0  # T
+        max_number_similarity_sentences = 0  # S
+        max_similarity_sentence_length = 0  # ST
         label_data = []
 
         for sample in data:
             text_length = len(sample[text_input_ids])
             if max_text_length < text_length:
                 max_text_length = text_length
-            
+
             similarity_sentences = sample[similarity_sentence_input_ids]
             number_similarity_sentences = len(similarity_sentences)
 
@@ -443,28 +444,44 @@ def collate_variable_token_similarity_dataset(
                 similarity_sentence_length = len(similarity_sentence)
                 if max_similarity_sentence_length < similarity_sentence_length:
                     max_similarity_sentence_length = similarity_sentence_length
-            
+
             label_data.append(sample[label_key])
 
         batched_data = defaultdict(list)
         for sample in data:
             for key, value in sample.items():
                 if key == text_input_ids:
-                    padded_text = _pad_sequence(text_padding_token, padding_side, value, max_text_length)
+                    padded_text = _pad_sequence(
+                        text_padding_token, padding_side, value, max_text_length
+                    )
                     batched_data[key].append(padded_text)
                 elif key == text_attention_mask or key == text_word_ids_mask:
-                    padded_text_masks = _pad_sequence(attention_pad_id, padding_side, value, max_text_length)
+                    padded_text_masks = _pad_sequence(
+                        attention_pad_id, padding_side, value, max_text_length
+                    )
                     batched_data[key].append(padded_text_masks)
-                elif key == similarity_sentence_input_ids or key == similarity_sentence_attention_mask:
-                    padded_similarity_sentence = _add_padding_lists(value, max_number_similarity_sentences)
+                elif (
+                    key == similarity_sentence_input_ids
+                    or key == similarity_sentence_attention_mask
+                ):
+                    padded_similarity_sentence = _add_padding_lists(
+                        value, max_number_similarity_sentences
+                    )
                     padding_value = text_padding_token
                     if key == similarity_sentence_attention_mask:
                         padding_value = attention_pad_id
                     sample_padded_similarity_sentences = []
                     for similarity_sentence_value in padded_similarity_sentence:
-                        padded_sentence_value = _pad_sequence(padding_value, padding_side, similarity_sentence_value, max_similarity_sentence_length)
+                        padded_sentence_value = _pad_sequence(
+                            padding_value,
+                            padding_side,
+                            similarity_sentence_value,
+                            max_similarity_sentence_length,
+                        )
                         sample_padded_similarity_sentences.append(padded_sentence_value)
-                    stacked_sample_padded_similarity_sentences = torch.vstack(sample_padded_similarity_sentences).unsqueeze(0)
+                    stacked_sample_padded_similarity_sentences = torch.vstack(
+                        sample_padded_similarity_sentences
+                    ).unsqueeze(0)
                     batched_data[key].append(stacked_sample_padded_similarity_sentences)
 
         batched_tensor_data: dict[str, torch.Tensor] = {}
@@ -472,7 +489,7 @@ def collate_variable_token_similarity_dataset(
             batched_tensor_data[key] = torch.vstack(value)
         batched_tensor_data[label_key] = torch.tensor(label_data, dtype=torch.long)
         return batched_tensor_data
-    
+
     return _collate
 
 

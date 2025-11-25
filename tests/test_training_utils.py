@@ -150,7 +150,7 @@ def test_descending_token_similarity_batch_sampler(
         assert isinstance(batch[0], int)
         sample_batch_size = len(batch)
         if not random:
-            if batch_size==2 and batch_index == 1:
+            if batch_size == 2 and batch_index == 1:
                 assert 1 == sample_batch_size
             elif batch_size == 2:
                 assert 2 == sample_batch_size
@@ -879,7 +879,6 @@ def test_collate_token_negative_examples_classification_dataset(
         ), data_key_name
 
 
-
 @pytest.mark.parametrize(
     "tokenizer_name", ["FacebookAI/roberta-base", "jhu-clsp/ettin-encoder-17m"]
 )
@@ -911,7 +910,7 @@ def test_collate_variable_token_similarity_dataset(
             text_input_ids: list(range(7)),
             text_attention_mask: [1] * 7,
             text_word_ids: [0, 0, 0, 0, 1, 1, 1],
-            label_key_name: 1
+            label_key_name: 1,
         },
         {
             label_definitions_input_ids: [list(range(6))],
@@ -919,7 +918,7 @@ def test_collate_variable_token_similarity_dataset(
             text_input_ids: list(range(10)),
             text_attention_mask: [1] * 10,
             text_word_ids: [1, 1, 0, 0, 0, 0, 0, 0, 0, 0],
-            label_key_name: 0
+            label_key_name: 0,
         },
     ]
 
@@ -935,7 +934,7 @@ def test_collate_variable_token_similarity_dataset(
         text_word_ids_mask=text_word_ids,
         similarity_sentence_input_ids=label_definitions_input_ids,
         similarity_sentence_attention_mask=label_definitions_attention_mask,
-        attention_pad_id=expected_attention_pad_id
+        attention_pad_id=expected_attention_pad_id,
     )
 
     collated_test_data = collate_function(test_data)
@@ -1013,32 +1012,28 @@ def test_collate_variable_token_similarity_dataset(
         text_word_ids: torch.tensor(
             [
                 [
-                    
-                        0,
-                        0,
-                        0,
-                        0,
-                        1,
-                        1,
-                        1,
-                        expected_attention_pad_id,
-                        expected_attention_pad_id,
-                        expected_attention_pad_id,
-                    
+                    0,
+                    0,
+                    0,
+                    0,
+                    1,
+                    1,
+                    1,
+                    expected_attention_pad_id,
+                    expected_attention_pad_id,
+                    expected_attention_pad_id,
                 ],
                 [
-                    
-                        1,
-                        1,
-                        0,
-                        0,
-                        0,
-                        0,
-                        0,
-                        0,
-                        0,
-                        0,
-                    
+                    1,
+                    1,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
                 ],
             ],
             dtype=torch.long,

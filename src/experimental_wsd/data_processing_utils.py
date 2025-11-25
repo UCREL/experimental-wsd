@@ -302,6 +302,3 @@ def token_word_id_mask(
         word_id_mask.append(token_offset_word_id_mask)
 
     return {word_id_mask_key: word_id_mask}
-
-
-

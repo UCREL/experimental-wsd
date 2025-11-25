@@ -223,16 +223,19 @@ class RaganatoEnglishConfig(BaseModel):
             directory=Path(self.data_directory, "Training_Corpora", "SemCor+OMSTI")
         )
 
-class MosaicoCoreUSASConfig(BaseModel):
 
-    data_directory:DirectoryPath
+class MosaicoCoreUSASConfig(BaseModel):
+    data_directory: DirectoryPath
 
     computed_field
+
     @property
     def train(self) -> list[FilePath]:
         train_file_paths = []
         for index in range(8):
-            train_file_path = Path(self.data_directory, f"wikipedia_export.jsonl.{index}").resolve()
+            train_file_path = Path(
+                self.data_directory, f"wikipedia_export.jsonl.{index}"
+            ).resolve()
             train_file_paths.append(train_file_path)
         return train_file_paths
 
@@ -240,7 +243,7 @@ class MosaicoCoreUSASConfig(BaseModel):
     @property
     def validation(self) -> FilePath:
         return Path(self.data_directory, "wikipedia_export.jsonl.8").resolve()
-    
+
     @computed_field
     @property
     def test(self) -> FilePath:
@@ -250,7 +253,7 @@ class MosaicoCoreUSASConfig(BaseModel):
 MaruEnglish: MaruEnglishConfig | None = None
 RaganatoEnglish: RaganatoEnglishConfig | None = None
 MosaicoCoreUSAS: MosaicoCoreUSASConfig | None = None
-USASMapper: Path| None = None
+USASMapper: Path | None = None
 
 if os.environ.get("ENGLISH_MARU_HARD"):
     MaruEnglish = MaruEnglishConfig(data_directory=os.environ.get("ENGLISH_MARU_HARD"))

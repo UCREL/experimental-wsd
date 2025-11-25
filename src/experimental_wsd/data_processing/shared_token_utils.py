@@ -1,11 +1,12 @@
 """
-These methods are to be used for numerous token level similarity tasks, e.g. 
-tasks at the token/Multi Word Expression level whereby given the token which is 
-the most similar text from a list of given texts. Examples of this type of 
-task is Word Sense Disambiguation with a setup like, 
-[Blevins and Zettlemoyer 2020](https://aclanthology.org/2020.acl-main.95/) and 
+These methods are to be used for numerous token level similarity tasks, e.g.
+tasks at the token/Multi Word Expression level whereby given the token which is
+the most similar text from a list of given texts. Examples of this type of
+task is Word Sense Disambiguation with a setup like,
+[Blevins and Zettlemoyer 2020](https://aclanthology.org/2020.acl-main.95/) and
 [Harsh Kohli 2021](https://arxiv.org/pdf/2105.10146)
 """
+
 from collections import defaultdict
 from random import shuffle as random_shuffle
 from typing import Any, Callable, Literal
@@ -13,19 +14,18 @@ from typing import Any, Callable, Literal
 import transformers
 import wn
 
+from experimental_wsd.data_processing import processed_usas_utils
 from experimental_wsd.wordnet_utils import (
     get_definition,
     get_negative_wordnet_sense_ids,
     get_normalised_mwe_lemma_for_wordnet,
 )
-from experimental_wsd.data_processing import processed_usas_utils
+
 
 def usas_map_to_definitions(
-    data: dict[str, list[str] | list[list[str]]],
-    usas_mapper: dict[str, str]
+    data: dict[str, list[str] | list[list[str]]], usas_mapper: dict[str, str]
 ) -> dict[str, list[str] | list[list[str]]]:
-    """
-    """
+    """ """
     usas_definitions = {"label_definitions": []}
     usas_labels = data["usas_labels"]
     for usas_label in usas_labels:
@@ -34,14 +34,13 @@ def usas_map_to_definitions(
     return usas_definitions
 
 
-def usas_join_positive_negative_labels(data: dict[str, Any], randomize: bool = True) -> dict[str, Any]:
+def usas_join_positive_negative_labels(
+    data: dict[str, Any], randomize: bool = True
+) -> dict[str, Any]:
     usas_label = data["usas"]
     negative_usas_labels = data["negative_usas"]
     combined_labels = [usas_label, *negative_usas_labels]
-    label_dict = {
-        "usas_labels": combined_labels,
-        "label_ids": 0
-    }
+    label_dict = {"usas_labels": combined_labels, "label_ids": 0}
     if randomize:
         shuffle_index = list(range(len(combined_labels)))
         random_shuffle(shuffle_index)
@@ -54,57 +53,67 @@ def usas_join_positive_negative_labels(data: dict[str, Any], randomize: bool = T
 
     return label_dict
 
-def usas_samples_to_single_sample(data: dict[str, Any]) -> dict[str, Any]:
-    """
-    """
 
-    exploded_data = {
-        key: [] for key in data
-    }
+def usas_samples_to_single_sample(data: dict[str, Any]) -> dict[str, Any]:
+    """ """
+
+    exploded_data = {key: [] for key in data}
     for batch_index, all_token_usas_tags in enumerate(data["usas"]):
         for token_index, token_usas_tags in enumerate(all_token_usas_tags):
             for usas_tag in token_usas_tags:
                 exploded_data["id"].append(data["id"][batch_index])
                 exploded_data["text"].append(data["text"][batch_index])
-                #exploded_data["tokens"].append(data["tokens"][batch_index][token_index])
-                exploded_data["usas_token_offsets"].append(data["usas_token_offsets"][batch_index][token_index])
+                # exploded_data["tokens"].append(data["tokens"][batch_index][token_index])
+                exploded_data["usas_token_offsets"].append(
+                    data["usas_token_offsets"][batch_index][token_index]
+                )
                 exploded_data["usas"].append(usas_tag)
-                exploded_data["negative_usas"].append(data["negative_usas"][batch_index][token_index])
+                exploded_data["negative_usas"].append(
+                    data["negative_usas"][batch_index][token_index]
+                )
     return exploded_data
 
 
 def map_negative_usas_labels(
-        mosaic_usas_sentence_instance: dict[str, Any],
-        positive_usas_key: str,
-        negative_usas_key: str,
-        usas_weighting: dict[str, float],
-        use_weights: bool
+    mosaic_usas_sentence_instance: dict[str, Any],
+    positive_usas_key: str,
+    negative_usas_key: str,
+    usas_weighting: dict[str, float],
+    use_weights: bool,
 ) -> dict[str, str]:
     """
     A HuggingFace Dataset mapper function which should be ran in non-batch mode.
     """
     all_positive_usas_labels = mosaic_usas_sentence_instance[positive_usas_key]
-    
 
     all_negative_usas_labels = [[] for _ in all_positive_usas_labels]
     if negative_usas_key in mosaic_usas_sentence_instance:
         all_negative_usas_labels = mosaic_usas_sentence_instance[negative_usas_key]
 
     new_all_negative_usas_labels = []
-    for negative_token_usas_tags, positive_token_usas_tags in zip(all_negative_usas_labels, all_positive_usas_labels):
-        new_negative_usas_tag = processed_usas_utils.random_negative_usas_label(positive_token_usas_tags, negative_token_usas_tags, usas_weighting, use_weights)
-        new_all_negative_usas_labels.append([new_negative_usas_tag, *negative_token_usas_tags])
+    for negative_token_usas_tags, positive_token_usas_tags in zip(
+        all_negative_usas_labels, all_positive_usas_labels
+    ):
+        new_negative_usas_tag = processed_usas_utils.random_negative_usas_label(
+            positive_token_usas_tags,
+            negative_token_usas_tags,
+            usas_weighting,
+            use_weights,
+        )
+        new_all_negative_usas_labels.append(
+            [new_negative_usas_tag, *negative_token_usas_tags]
+        )
 
     return {negative_usas_key: new_all_negative_usas_labels}
 
 
-def remove_duplicate_list_of_list_entries_while_maintaining_order(data: dict[str, Any],
-                                                                  key: str,
-                                                                  tags_to_filter_out: set[str] | None = None) -> dict[str, Any]:
+def remove_duplicate_list_of_list_entries_while_maintaining_order(
+    data: dict[str, Any], key: str, tags_to_filter_out: set[str] | None = None
+) -> dict[str, Any]:
     """
-    Given a dataset sample, it will de-duplicate the data that is associated with 
-    the given key. The data to de-duplicate should be a list of a list of Any hashable 
-    value, the de-duplicated version of this data is de-duplicated at the inner list 
+    Given a dataset sample, it will de-duplicate the data that is associated with
+    the given key. The data to de-duplicate should be a list of a list of Any hashable
+    value, the de-duplicated version of this data is de-duplicated at the inner list
     level, e.g.
 
     Input:
@@ -113,10 +122,10 @@ def remove_duplicate_list_of_list_entries_while_maintaining_order(data: dict[str
     Output:
     `key`: [[0,1,2,3], [1,2,3]]
 
-    This can be required for USAS tags as when the rule based tagger outputs tags 
-    some tags are combined e.g. Z1/A5 which means that token it has tagged belongs 
-    to both Z1 and A5, however when these tags are flattened, e.g. Z1 A5 it 
-    can create duplicates for a token as these tags can also be outputted 
+    This can be required for USAS tags as when the rule based tagger outputs tags
+    some tags are combined e.g. Z1/A5 which means that token it has tagged belongs
+    to both Z1 and A5, however when these tags are flattened, e.g. Z1 A5 it
+    can create duplicates for a token as these tags can also be outputted
     individually.
 
     A HuggingFace Datasets mapper function which should be ran in non-batch mode.
@@ -139,7 +148,6 @@ def remove_duplicate_list_of_list_entries_while_maintaining_order(data: dict[str
             unique_tags.add(usas_tag)
         all_de_duplicated_usas_tags.append(de_duplicated_tags)
     return {key: all_de_duplicated_usas_tags}
-    
 
 
 def map_token_sense_labels(
@@ -157,12 +165,12 @@ def map_token_sense_labels(
         list[str | None]. When None we do not know the POS tag of the label data.
     `token_offsets`: A list of tuples which contain token start and end indexes
         for each annotation. One for each annotation. list[tuple[int, int]]
-    `labels`: A list of a list of WordNet sense keys that represent the gold labels 
-        for the given annotation, e.g. `[[`carrousel%1:06:01::`]]`. 
-        list[list[str]], it can be the case per annotation there is more than 
+    `labels`: A list of a list of WordNet sense keys that represent the gold labels
+        for the given annotation, e.g. `[[`carrousel%1:06:01::`]]`.
+        list[list[str]], it can be the case per annotation there is more than
         one true/gold label.
-    `sense_labels`: A list of a list of WordNet sense IDs that represent the 
-        Sense ID of the labels, e.g. [[`omw-en-carrousel-02966372-n`]]. 
+    `sense_labels`: A list of a list of WordNet sense IDs that represent the
+        Sense ID of the labels, e.g. [[`omw-en-carrousel-02966372-n`]].
         list[list[str]]. This key will not exist if `word_net_sense_getter` is None.
 
     A HuggingFace Datasets mapper function which be ran in non-batch mode.
@@ -221,7 +229,6 @@ def map_token_sense_labels(
                 end_token_offset = token_offsets[-1]
             end_token_offset += 1
             sample_labels.append(label)
-            
 
             if word_net_sense_getter is not None:
                 label_sense = word_net_sense_getter(label)
@@ -355,7 +362,7 @@ def map_and_flatten_token_sense_labels(
 
 
 def map_negative_sense_ids(
-    text_with_annotations: dict[str, list[str| None | list[str]]],
+    text_with_annotations: dict[str, list[str | None | list[str]]],
     word_net_lexicon: wn.Wordnet,
     sense_id_key: str,
     lemma_key: str = "lemma",
@@ -366,12 +373,12 @@ def map_negative_sense_ids(
     normalise_mwe_lemma: bool = True,
 ) -> dict[str, list[str]]:
     """
-    Given a data sample, sample being here a text with multiple tokens that have 
-    annotations associated to them which in this case are a sense ID, 
+    Given a data sample, sample being here a text with multiple tokens that have
+    annotations associated to them which in this case are a sense ID,
     containing at least the following key-values:
-    * `sense_id_key` (list[str] | list[list[str]]) - The list of positive word net 
-        sense ID for the sample. e.g. list[`omw-en-carrousel-02966372-n`]. It can 
-        also be a list[list[str]], e.g. list[list[`omw-en-carrousel-02966372-n`]] 
+    * `sense_id_key` (list[str] | list[list[str]]) - The list of positive word net
+        sense ID for the sample. e.g. list[`omw-en-carrousel-02966372-n`]. It can
+        also be a list[list[str]], e.g. list[list[`omw-en-carrousel-02966372-n`]]
         allowing for more than one positive label to be associated to a token.
     * `lemma_key` (list[str]) - The list of lemmas.
     * `pos_tag_key` (list[str | None]) - The list of POS tags, the list can
@@ -381,7 +388,7 @@ def map_negative_sense_ids(
     POS tag and positive word net sense ID at index 0.
 
 
-    It will return all of the negative Wordnet sense ids, 
+    It will return all of the negative Wordnet sense ids,
     e.g. [`omw-en-carrousel-02966372-n`], for this sample based on
     all of the senses that are associated to the (lemma, POS tag) which are not
     the positive word net sense ID.
@@ -418,11 +425,11 @@ def map_negative_sense_ids(
             whitespace, e.g. `New York` in SemCor the lemma would be `new_york`
             whereas in Wordnet it would be `new york`. Default is True.
     Returns:
-        dict[str, list[list[str]]]: A dictionary containing 1 key named 
-            `negative_sense_id_key` with the following as it's value, 
-            negative Wordnet sense IDs in Wordnet order, meaning the first 
-            sense ID should be the most likely for the given (lemma, POS tag). 
-            There are a list of negative Wordnet sense IDs per a positive 
+        dict[str, list[list[str]]]: A dictionary containing 1 key named
+            `negative_sense_id_key` with the following as it's value,
+            negative Wordnet sense IDs in Wordnet order, meaning the first
+            sense ID should be the most likely for the given (lemma, POS tag).
+            There are a list of negative Wordnet sense IDs per a positive
             sense ID.
     """
 
@@ -461,10 +468,11 @@ def map_negative_sense_ids(
 
     return {negative_sense_id_key: all_negative_sense_ids}
 
+
 def sample_to_a_sense(data: dict[str, Any]) -> dict[str, Any]:
     """
-    Given data with the following keys, whereby as we are running this as a 
-    HuggingFace map function in batch mode each one of these key-values 
+    Given data with the following keys, whereby as we are running this as a
+    HuggingFace map function in batch mode each one of these key-values
     will be wrapped around an outer list representing the batch sample:
     `text`: A list of token texts that represents the contextualized text.
         list[str].
@@ -474,33 +482,33 @@ def sample_to_a_sense(data: dict[str, Any]) -> dict[str, Any]:
         list[str | None]. When None we do not know the POS tag of the label data.
     `token_offsets`: A list of tuples which contain token start and end indexes
         for each annotation. One for each annotation. list[tuple[int, int]]
-    `labels`: A list of a list of WordNet sense keys that represent the gold labels 
-        for the given annotation, e.g. `[[`carrousel%1:06:01::`]]`. 
-        list[list[str]], it can be the case per annotation there is more than 
+    `labels`: A list of a list of WordNet sense keys that represent the gold labels
+        for the given annotation, e.g. `[[`carrousel%1:06:01::`]]`.
+        list[list[str]], it can be the case per annotation there is more than
         one true/gold label.
-    `sense_labels`: A list of a list of WordNet sense IDs that represent the 
-        Sense ID of the labels, e.g. [[`omw-en-carrousel-02966372-n`]]. 
+    `sense_labels`: A list of a list of WordNet sense IDs that represent the
+        Sense ID of the labels, e.g. [[`omw-en-carrousel-02966372-n`]].
         list[list[str]].
-    `negative_labels`: A list of a list of negative Wordnet sense IDs associated 
+    `negative_labels`: A list of a list of negative Wordnet sense IDs associated
         to the positive sense IDs.
-    
-    It will return this data with the same keys but all values apart from the 
-    `text` and `negative_labels` will be represented as a String as the labels 
-    will have been exploded (term used within the Pandas ecosystem) so that we have 
+
+    It will return this data with the same keys but all values apart from the
+    `text` and `negative_labels` will be represented as a String as the labels
+    will have been exploded (term used within the Pandas ecosystem) so that we have
     one sample per a positive label.
 
     `text`: A list of token texts that represents the contextualized text.
         list[str].
     `lemmas`: The lemma of the token associated to the positive label. str.
-    `pos_tags`: A POS tag, which can be None if not known, associated to the 
+    `pos_tags`: A POS tag, which can be None if not known, associated to the
         the positive label. str | None.
-    `token_offsets`: token start and end indexes for the token associated to the 
+    `token_offsets`: token start and end indexes for the token associated to the
         positive label. tuple[int, int]
-    `labels`: A WordNet sense keys that represent the gold label e.g. 
+    `labels`: A WordNet sense keys that represent the gold label e.g.
         `carrousel%1:06:01::`. str.
-    `sense_labels`: A WordNet sense IDs that represent the Sense ID of the 
+    `sense_labels`: A WordNet sense IDs that represent the Sense ID of the
         label, e.g. `omw-en-carrousel-02966372-n`. str.
-    `negative_labels`: A list of negative Wordnet sense IDs associated 
+    `negative_labels`: A list of negative Wordnet sense IDs associated
         to the positive sense ID.
 
     A HuggingFace Datasets mapper function which be ran in batch mode.
@@ -508,55 +516,65 @@ def sample_to_a_sense(data: dict[str, Any]) -> dict[str, Any]:
     Args:
         data (dict[str, Any]): The data dictionary.
     Returns:
-        dict[str, Any]: The data dictionary which has been exploded so that 
+        dict[str, Any]: The data dictionary which has been exploded so that
             each sample contains one sense of data.
     """
 
-    exploded_data = {
-        key: [] for key in data
-    }
+    exploded_data = {key: [] for key in data}
     for batch_index, sample_sense_labels in enumerate(data["sense_labels"]):
         for sample_index, sense_labels in enumerate(sample_sense_labels):
             for sense_label_index, sense_label in enumerate(sense_labels):
                 exploded_data["text"].append(data["text"][batch_index])
-                exploded_data["lemmas"].append(data["lemmas"][batch_index][sample_index])
-                exploded_data["pos_tags"].append(data["pos_tags"][batch_index][sample_index])
-                exploded_data["token_offsets"].append(data["token_offsets"][batch_index][sample_index])
+                exploded_data["lemmas"].append(
+                    data["lemmas"][batch_index][sample_index]
+                )
+                exploded_data["pos_tags"].append(
+                    data["pos_tags"][batch_index][sample_index]
+                )
+                exploded_data["token_offsets"].append(
+                    data["token_offsets"][batch_index][sample_index]
+                )
                 exploded_data["sense_labels"].append(sense_label)
-                exploded_data["labels"].append(data["labels"][batch_index][sample_index][sense_label_index])
-                exploded_data["negative_labels"].append(data["negative_labels"][batch_index][sample_index])
+                exploded_data["labels"].append(
+                    data["labels"][batch_index][sample_index][sense_label_index]
+                )
+                exploded_data["negative_labels"].append(
+                    data["negative_labels"][batch_index][sample_index]
+                )
     return exploded_data
 
 
-def join_positive_negative_labels(data: dict[str, Any], randomize: bool = True) -> dict[str, Any]:
+def join_positive_negative_labels(
+    data: dict[str, Any], randomize: bool = True
+) -> dict[str, Any]:
     """
     Given data with the following key names and values:
     `text`: A list of token texts that represents the contextualized text.
         list[str].
     `lemmas`: The lemma of the token associated to the positive label. str.
-    `pos_tags`: A POS tag, which can be None if not known, associated to the 
+    `pos_tags`: A POS tag, which can be None if not known, associated to the
         the positive label. str | None.
-    `token_offsets`: token start and end indexes for the token associated to the 
+    `token_offsets`: token start and end indexes for the token associated to the
         positive label. tuple[int, int]
-    `labels`: A WordNet sense keys that represent the gold label e.g. 
+    `labels`: A WordNet sense keys that represent the gold label e.g.
         `carrousel%1:06:01::`. str.
-    `sense_labels`: A WordNet sense IDs that represent the Sense ID of the 
+    `sense_labels`: A WordNet sense IDs that represent the Sense ID of the
         label, e.g. `omw-en-carrousel-02966372-n`. str.
-    `negative_labels`: A list of negative Wordnet sense IDs associated 
+    `negative_labels`: A list of negative Wordnet sense IDs associated
         to the positive sense ID.
-    
+
     It will return two key names and values:
 
     `label_sense_ids`: The combination of `sense_labels` and `negative_labels`
         whereby when combined they are they randomized if `randomize` is `True`.
-    `label_ids`: The index of the correct/positive sense ID within the list of 
+    `label_ids`: The index of the correct/positive sense ID within the list of
         label sense IDs.
 
     A HuggingFace Datasets mapper function which should be ran in non-batch mode.
 
     Args:
         data (dict[str, Any]): The data that contains the expected input.
-        randomize (bool): If True then the combined `sense_labels` and `negative_labels` 
+        randomize (bool): If True then the combined `sense_labels` and `negative_labels`
             will be randomized else they will not. Default is `False`.
     Returns:
         dict[str, Any]: The expected output.
@@ -564,10 +582,7 @@ def join_positive_negative_labels(data: dict[str, Any], randomize: bool = True) 
     sense_labels = data["sense_labels"]
     negative_sense_labels = data["negative_labels"]
     combined_labels = [sense_labels, *negative_sense_labels]
-    label_dict = {
-        "label_sense_ids": combined_labels,
-        "label_ids": 0
-    }
+    label_dict = {"label_sense_ids": combined_labels, "label_ids": 0}
     if randomize:
         shuffle_index = list(range(len(combined_labels)))
         random_shuffle(shuffle_index)
@@ -579,6 +594,7 @@ def join_positive_negative_labels(data: dict[str, Any], randomize: bool = True) 
         label_dict["label_sense_ids"] = tmp_combined_labels
 
     return label_dict
+
 
 def filter_empty_values(data: dict[str, list[Any]], key: str) -> bool:
     """
@@ -606,8 +622,8 @@ def token_word_id_mask(
     word_id_mask_key: str,
 ) -> dict[str, list[list[Literal[0, 1]]]]:
     """
-    Creates a token id mask for a token offset based off the word ids from the 
-    tokenizer output of the given text. The mask represents 1's for tokens that 
+    Creates a token id mask for a token offset based off the word ids from the
+    tokenizer output of the given text. The mask represents 1's for tokens that
     are within the token offset and 0's for tokens outside the offset.
 
     Example;
@@ -617,7 +633,7 @@ def token_word_id_mask(
     }
 
     expected_output = {
-        word_id_mask_key: 
+        word_id_mask_key:
             [0,1,1,1,1,1,1,0,0]
     }
     Whereby we can see that the word 1 and 2 are represented by many sub word
@@ -634,7 +650,7 @@ def token_word_id_mask(
             the `word_ids_key` and `token_offsets_key`.
         word_ids_key (str): The key that contains word ids, a list of either
             None or integer values.
-        token_offsets_key (str): The key that contains the token offset, each 
+        token_offsets_key (str): The key that contains the token offset, each
             offset should contain two integers representing
             the start and end word indexes of a word or multi word expression.
             For example `[0, 1]` would represent the first word in the text.
@@ -651,7 +667,7 @@ def token_word_id_mask(
 
     start_offset, end_offset = token_offset
     relevant_word_ids = set(range(start_offset, end_offset))
-    
+
     for word_id in word_ids:
         if word_id in relevant_word_ids:
             token_offset_word_id_mask.append(1)
@@ -705,19 +721,18 @@ def map_to_definitions(
 
     return sense_definitions
 
+
 def filter_sequences_too_long(
-        data: dict[str, list[str]],
-        key: str,
-        length: int
+    data: dict[str, list[str]], key: str, length: int
 ) -> bool:
     """
-    Returns False if the length of the value of the `key` from `data` is longer 
+    Returns False if the length of the value of the `key` from `data` is longer
     than or equal to the `length`.
 
     HuggingFace dataset filter.
 
     Args:
-        data (dict[str, list[str]]): The data that contains the `key` and it's 
+        data (dict[str, list[str]]): The data that contains the `key` and it's
             value.
         key (str): The key whole value cannot be as long or longer than `length`
         length (int): The maximum length.
@@ -728,6 +743,7 @@ def filter_sequences_too_long(
     if len(data[key]) >= length:
         return False
     return True
+
 
 def tokenize_key(
     data: dict[str, list[str] | list[list[str]]],
@@ -827,19 +843,20 @@ def tokenize_key(
         tokenized_outputs = _tokenize_text_list(data[text_key])
         return tokenized_outputs
 
-#def explode_key_value(data: dict[str, Any],
+
+# def explode_key_value(data: dict[str, Any],
 #                      explode_key: str,
 #                      ) -> list[dict[str, Any]]:
 #    """
-#    Like the Pandas (and other data science tools) this explode function 
-#    takes a explode_key name within the data and transforms each list like value 
+#    Like the Pandas (and other data science tools) this explode function
+#    takes a explode_key name within the data and transforms each list like value
 #    in the explode_key value into it's own sample.
 #
 #    We assume the following for all key value's that are not the explode_key:
-#    * If the value is a list of values that is not equal in length to the explode_key 
+#    * If the value is a list of values that is not equal in length to the explode_key
 #        value then it is to be replicated as is.
 #    * If the value is not a list it is to be replicated as is.
-#    * If the value is a 
+#    * If the value is a
 #    """
 #
 #    return {}

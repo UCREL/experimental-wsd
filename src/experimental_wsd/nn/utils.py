@@ -32,7 +32,9 @@ def tiny_value_of_dtype(dtype: torch.dtype) -> float:
         raise TypeError("Does not support dtype " + str(dtype))
 
 
-def get_linear_schedule_with_warmup(optimizer, num_warmup_steps, num_training_steps, last_epoch=-1):
+def get_linear_schedule_with_warmup(
+    optimizer, num_warmup_steps, num_training_steps, last_epoch=-1
+):
     """
     Create a schedule with a learning rate that decreases linearly from the initial lr set in the optimizer to 0, after
     a warmup period during which it increases linearly from 0 to the initial lr set in the optimizer.
@@ -54,10 +56,16 @@ def get_linear_schedule_with_warmup(optimizer, num_warmup_steps, num_training_st
         `torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
     """
 
-    def _get_linear_schedule_with_warmup_lr_lambda(current_step: int, *, num_warmup_steps: int, num_training_steps: int):
+    def _get_linear_schedule_with_warmup_lr_lambda(
+        current_step: int, *, num_warmup_steps: int, num_training_steps: int
+    ):
         if current_step < num_warmup_steps:
             return float(current_step) / float(max(1, num_warmup_steps))
-        return max(0.0, float(num_training_steps - current_step) / float(max(1, num_training_steps - num_warmup_steps)))
+        return max(
+            0.0,
+            float(num_training_steps - current_step)
+            / float(max(1, num_training_steps - num_warmup_steps)),
+        )
 
     lr_lambda = functools.partial(
         _get_linear_schedule_with_warmup_lr_lambda,

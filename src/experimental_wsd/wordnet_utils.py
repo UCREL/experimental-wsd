@@ -187,8 +187,8 @@ def get_negative_wordnet_sense_ids(
     get_random_sense: bool = False,
 ) -> list[str]:
     """
-    Given a lemma, optional POS tag, and a list of positive sense ID, it will 
-    return all of the negative Wordnet sense ids for this sample based on 
+    Given a lemma, optional POS tag, and a list of positive sense ID, it will
+    return all of the negative Wordnet sense ids for this sample based on
     all of the senses that are associated to the (lemma, POS tag) which are not
     the positive word net sense IDs.
 
