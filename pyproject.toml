@@ -25,6 +25,13 @@ dependencies = [
     "pyyaml>=6.0.2",
     "omegaconf>=2.3.0",
     "torchdata>=0.11.0",
+    "seaborn>=0.13.2",
+    "en-dual-none-contextual",
+    "fi-core-news-lg",
+    "fi-single-upos2usas-contextual",
+    "zh-core-web-trf",
+    "cmn-dual-upos2usas-contextual",
+    "cy-dual-basiccorcencc2usas-contextual",
 ]
 
 [tool.uv.sources]
@@ -33,6 +40,12 @@ torch = [
   { index = "pytorch-cu128", marker = "sys_platform == 'linux'" },
 ]
 en-core-web-trf = { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_trf-3.8.0/en_core_web_trf-3.8.0.tar.gz" }
+en-dual-none-contextual = { url = "https://github.com/UCREL/pymusas-models/releases/download/en_dual_none_contextual-0.3.3/en_dual_none_contextual-0.3.3-py3-none-any.whl" }
+fi-core-news-lg = { url = "https://github.com/explosion/spacy-models/releases/download/fi_core_news_lg-3.8.0/fi_core_news_lg-3.8.0.tar.gz" }
+fi-single-upos2usas-contextual = { url = "https://github.com/UCREL/pymusas-models/releases/download/fi_single_upos2usas_contextual-0.3.3/fi_single_upos2usas_contextual-0.3.3-py3-none-any.whl" }
+zh-core-web-trf = { url = "https://github.com/explosion/spacy-models/releases/download/zh_core_web_trf-3.8.0/zh_core_web_trf-3.8.0.tar.gz" }
+cmn-dual-upos2usas-contextual = { url = "https://github.com/UCREL/pymusas-models/releases/download/cmn_dual_upos2usas_contextual-0.3.3/cmn_dual_upos2usas_contextual-0.3.3-py3-none-any.whl" }
+cy-dual-basiccorcencc2usas-contextual = { url = "https://github.com/UCREL/pymusas-models/releases/download/cy_dual_basiccorcencc2usas_contextual-0.3.3/cy_dual_basiccorcencc2usas_contextual-0.3.3-py3-none-any.whl" }
 
 [[tool.uv.index]]
 name = "pytorch-cpu"
