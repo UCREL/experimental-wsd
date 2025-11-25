@@ -1,6 +1,12 @@
 data/*
 !data/download_data.sh
+!data/download_english_usas_moasaico.py
+!data/download_usas_data.sh
 .python-version
 .env
 __pycache__
 lightning_logs
+.ruff_cache
+.pytest_cache
+.venv
+.vscode
