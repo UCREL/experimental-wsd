@@ -1,10 +1,15 @@
 # Neural Semantic Tagger for USAS
 
+* Paper 📝 - [Creating a Hybrid Rule and Neural Network Based Semantic Tagger using Silver Standard Data: the PyMUSAS framework for Multilingual Semantic Annotation](https://arxiv.org/pdf/2601.09648)
+* PyMUSAS (spaCy) Intergration 🚀 - The models created within the paper can be used within [PyMUSAS](https://ucrel.github.io/pymusas/) a Python based semantic tagging framework that can be used with and without spaCy, all the model have their "how-to" tutorials.
+* HuggingFace 🤗 - All trained models, silver labelled training dataset, and evaluation datasets from the paper can be found in the following [HuggingFace collection.](https://huggingface.co/collections/ucrelnlp/usas-neural-taggers-10)
+* All single and Multi Word Expression (MWE) lexicons used in the rule based models can be found at the following GitHub Repository [https://github.com/UCREL/Multilingual-USAS](https://github.com/UCREL/Multilingual-USAS)
+
+This code base was used in the experiments within the paper [Creating a Hybrid Rule and Neural Network Based Semantic Tagger using Silver Standard Data: the PyMUSAS framework for Multilingual Semantic Annotation](https://arxiv.org/pdf/2601.09648), the pre-trained neural semantic taggers described in that paper and trained using this code base can be found on HuggingFace in the following collection [USAS-Neural-Taggers-1.0](https://huggingface.co/collections/ucrelnlp/usas-neural-taggers-10), in addition these neural taggers can be used within the [PyMUSAS framework](https://ucrel.github.io/pymusas/) which is an easy to use Python semantic tagging framework that already contains other semantic tagging models like rule-based models and supports the spaCy pipeline interface.
+
 This repository contains the code to train the PyMUSAS Neural tagger, a BERT/transformer based semantic tagger that outputs token level semantic tags from the [USAS tagset](https://ucrel.lancs.ac.uk/usas/usas_guide.pdf).
 
 The scripts described in this README allow you to train a variation of the [Bi-Encoder Model (BEM) from Blevins and Zettlemoyer 2020](https://aclanthology.org/2020.acl-main.95.pdf) a Word Sense Disambiguation (WSD) model. The only difference between the original and this version is that this version ties the weights of the context and gloss encoder. The model is trained to find the most relevant gloss/description for a given contextualised token that is to be disambiguated. The description comes from the semantic tagset, which in this case is USAS, whereby the description describes a semantic tag.
-
-This code base was used in the experiments within the paper [Creating a Hybrid Rule and Neural Network Based Semantic Tagger using Silver Standard Data: the PyMUSAS framework for Multilingual Semantic Annotation](https://arxiv.org/pdf/2601.09648), the pre-trained neural semantic taggers described in that paper and trained using this code base can be found on HuggingFace in the following collection [USAS-Neural-Taggers-1.0](https://huggingface.co/collections/ucrelnlp/usas-neural-taggers-10), in addition these neural taggers can be used within the [PyMUSAS framework](https://ucrel.github.io/pymusas/) which is an easy to use Python semantic tagging framework that already contains other semantic tagging models like rule-based models and supports the spaCy pipeline interface.
 
 ## Setup
 
